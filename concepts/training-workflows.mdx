@@ -1,0 +1,281 @@
+---
+title: "Training Workflows"
+description: "Experiment tracking, configuration management, and reproducible ML training"
+---
+
+## Why Structured Training Matters
+
+Training ML models is inherently experimental. You'll run dozens or hundreds of experiments, tweaking hyperparameters, architectures, and datasets. Without proper workflow management:
+- **Lost experiments**: "What config gave us 92% accuracy?"
+- **Unreproducible results**: "The model worked yesterday..."
+- **Wasted compute**: Re-running failed experiments because you forgot to log something
+- **Team chaos**: Everyone has their own training scripts with hardcoded values
+
+A good training workflow provides reproducibility, configurability, and observability.
+
+## Configuration Management
+
+### Hydra
+
+Hydra separates code from configuration, making experiments reproducible and composable:
+
+```python
+# config.yaml
+model:
+  name: bert-base
+  dropout: 0.1
+training:
+  batch_size: 32
+  learning_rate: 2e-5
+  epochs: 3
+```
+
+```python
+import hydra
+from omegaconf import DictConfig
+
+@hydra.main(config_path=".", config_name="config", version_base=None)
+def train(cfg: DictConfig):
+    model = load_model(cfg.model.name, dropout=cfg.model.dropout)
+    # Training code uses cfg instead of hardcoded values
+    train_model(model, lr=cfg.training.learning_rate)
+
+if __name__ == "__main__":
+    train()
+```
+
+**Override from CLI:**
+
+```bash
+python train.py training.learning_rate=5e-5 model.dropout=0.2
+```
+
+Hydra automatically logs the full config with each run, making experiments reproducible.
+
+<Info>
+Hydra's composition lets you create config variants (e.g., `config/model/bert-base.yaml`, `config/model/roberta.yaml`) and mix them: `python train.py model=roberta`
+</Info>
+
+## Experiment Tracking
+
+### Weights & Biases (W&B)
+
+W&B is the industry standard for tracking experiments:
+
+```python
+import wandb
+
+wandb.init(project="my-project", config={"lr": 1e-3, "batch_size": 32})
+
+for epoch in range(num_epochs):
+    loss = train_epoch()
+    val_acc = evaluate()
+    wandb.log({"loss": loss, "val_acc": val_acc, "epoch": epoch})
+
+wandb.log_artifact(model, name="final-model", type="model")
+```
+
+**Key features:**
+- Interactive dashboards with real-time plots
+- Hyperparameter sweeps
+- Model versioning and lineage
+- Collaboration and sharing
+- Free for personal/academic use
+
+<CardGroup cols={2}>
+  <Card title="MLflow" icon="flask">
+    Open-source, self-hosted, integrates with many frameworks
+  </Card>
+  <Card title="Neptune.ai" icon="ship">
+    Strong metadata search, good for large teams
+  </Card>
+  <Card title="Comet ML" icon="chart-line">
+    Great UI, built-in model registry
+  </Card>
+  <Card title="TensorBoard" icon="brain">
+    Simple, works offline, but limited features
+  </Card>
+</CardGroup>
+
+<Note>
+For production systems, consider MLflow for its model registry and deployment integrations. For research, W&B or Neptune.ai provide the best UX.
+</Note>
+
+## Project Structure
+
+A well-organized project makes collaboration easier:
+
+```
+my-ml-project/
+├── configs/           # Hydra configs
+│   ├── config.yaml
+│   ├── model/
+│   └── training/
+├── src/
+│   ├── data/          # Dataloaders
+│   ├── models/        # Model definitions
+│   ├── training/      # Training loops
+│   └── utils/
+├── tests/
+├── notebooks/         # Exploration (not for production)
+├── pyproject.toml     # Dependencies
+└── README.md
+```
+
+<Info>
+Use **uv** or **poetry** for dependency management instead of raw pip. They create reproducible environments and handle version resolution.
+</Info>
+
+## Code Quality
+
+### Ruff
+
+Ruff is a fast Python linter and formatter:
+
+```bash
+# Format code
+ruff format .
+
+# Check for issues
+ruff check .
+```
+
+Ruff replaces multiple tools (Black, isort, flake8, pylint) with one fast binary written in Rust.
+
+<Note>
+Add `ruff format` and `ruff check` to your CI pipeline. Enforce formatting before merging PRs.
+</Note>
+
+## Classic Example: BERT Fine-tuning
+
+Module 3 includes a complete example of fine-tuning BERT for text classification:
+
+- Hydra for configuration
+- W&B for experiment tracking
+- Hugging Face Transformers
+- Proper train/val/test splits
+- Metric logging and model checkpointing
+
+## Modern Example: LLM Fine-tuning
+
+Module 3 also covers fine-tuning modern LLMs (Phi-3):
+
+- LoRA (Low-Rank Adaptation) for parameter-efficient training
+- Quantization (4-bit/8-bit) to fit on consumer GPUs
+- Instruction tuning datasets
+- Evaluation on domain-specific tasks
+
+<Info>
+For LLMs, prefer LoRA or QLoRA over full fine-tuning. They're faster, use less memory, and often generalize better.
+</Info>
+
+## Testing LLM Outputs
+
+LLMs introduce non-determinism. Testing requires different strategies:
+
+<CardGroup cols={2}>
+  <Card title="DeepEval" icon="check-circle">
+    Evaluate RAG systems, check hallucinations, measure relevance
+  </Card>
+  <Card title="Promptfoo" icon="terminal">
+    CLI for testing prompts across models and configs
+  </Card>
+  <Card title="Ragas" icon="star">
+    Metrics for retrieval and generation quality
+  </Card>
+  <Card title="UpTrain" icon="chart-bar">
+    Monitor prompt performance over time
+  </Card>
+</CardGroup>
+
+**Example test:**
+
+```python
+from deepeval import assert_test
+from deepeval.metrics import HallucinationMetric
+from deepeval.test_case import LLMTestCase
+
+test_case = LLMTestCase(
+    input="What is the capital of France?",
+    actual_output="Paris is the capital.",
+    context=["Paris is the capital and largest city of France."]
+)
+
+metric = HallucinationMetric(threshold=0.5)
+assert_test(test_case, [metric])
+```
+
+## Distributed Training
+
+For large models, single-GPU training isn't enough:
+
+- **Data Parallel**: Replicate model on each GPU, split batches
+- **Model Parallel**: Split model layers across GPUs
+- **Pipeline Parallel**: Like model parallel, but with pipelining
+- **FSDP** (Fully Sharded Data Parallel): Shard model parameters across GPUs
+
+<Note>
+PyTorch Lightning and DeepSpeed abstract distributed training. Start with Lightning's built-in DDP, then move to DeepSpeed ZeRO for 100B+ models.
+</Note>
+
+## Hyperparameter Search
+
+Instead of manual tuning, use automated search:
+
+- **Ray Tune**: Distributed HPO with early stopping
+- **Optuna**: Bayesian optimization
+- **Weights & Biases Sweeps**: Integrated with W&B
+- **AutoGluon**: AutoML with minimal code
+
+```python
+# W&B sweep config
+sweep_config = {
+    'method': 'bayes',
+    'metric': {'name': 'val_acc', 'goal': 'maximize'},
+    'parameters': {
+        'learning_rate': {'min': 1e-5, 'max': 1e-3},
+        'batch_size': {'values': [16, 32, 64]},
+    }
+}
+
+sweep_id = wandb.sweep(sweep_config, project='my-project')
+wandb.agent(sweep_id, function=train)
+```
+
+## Model Cards
+
+Document your models for transparency and reproducibility:
+
+- **What**: Architecture, dataset, training procedure
+- **Why**: Intended use case and limitations
+- **How**: Performance metrics, biases, ethical considerations
+
+<Info>
+Hugging Face popularized model cards. See [GPT-4 System Card](https://cdn.openai.com/papers/gpt-4-system-card.pdf) for a production example.
+</Info>
+
+## Hands-On Examples
+
+Explore training workflows in [Module 3](/modules/module-3/overview):
+- BERT fine-tuning with Hydra + W&B
+- Phi-3 fine-tuning with LoRA
+- LLM evaluation with DeepEval
+- Project structure best practices
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pipeline Orchestration" href="/concepts/pipeline-orchestration" icon="sitemap">
+    Automate training at scale
+  </Card>
+  <Card title="Model Serving" href="/concepts/model-serving" icon="server">
+    Deploy trained models
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [Hydra Documentation](https://hydra.cc/docs/intro/)
+- [Weights & Biases Best Practices](https://docs.wandb.ai/guides/track/best-practices)
+- [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/)
+- [Model Cards Paper](https://arxiv.org/abs/1810.03993)

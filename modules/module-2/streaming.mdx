@@ -1,0 +1,409 @@
+---
+title: 'Streaming Datasets'
+description: 'Create and consume streaming datasets for efficient ML training'
+icon: 'water'
+---
+
+## Introduction
+
+Streaming datasets enable efficient data loading for large-scale training by:
+- Downloading data on-demand during training
+- Reducing local storage requirements
+- Supporting deterministic shuffling
+- Enabling infinite data iteration
+
+## Why Streaming Datasets?
+
+<CardGroup cols={2}>
+  <Card title="Scalability" icon="arrow-up-right-dots">
+    Train on datasets larger than available disk space by streaming from cloud storage
+  </Card>
+  
+  <Card title="Efficiency" icon="gauge-high">
+    Start training immediately without waiting for full dataset downloads
+  </Card>
+  
+  <Card title="Flexibility" icon="shuffle">
+    Deterministic shuffling across epochs with configurable seed values
+  </Card>
+  
+  <Card title="Cost Savings" icon="dollar-sign">
+    Reduce storage costs by caching only actively used data
+  </Card>
+</CardGroup>
+
+## MosaicML Streaming
+
+MosaicML Streaming provides an efficient format for training data.
+
+### Installation
+
+```bash
+uv sync
+# or
+pip install mosaicml-streaming
+```
+
+### Creating a Streaming Dataset
+
+Convert your data to MDS (Mosaic Data Shard) format:
+
+```python streaming-dataset/mock_data.py
+from pathlib import Path
+import numpy as np
+from PIL import Image
+from streaming import MDSWriter
+
+def create_data(
+    path_to_save: Path = Path("mds-dataset"), 
+    size: int = 100_000
+):
+    # Define schema
+    columns = {
+        "image": "jpeg",
+        "class": "int"
+    }
+    compression = "zstd"
+    
+    # Write dataset
+    with MDSWriter(
+        out=str(path_to_save), 
+        columns=columns, 
+        compression=compression
+    ) as out:
+        for _ in range(size):
+            sample = {
+                "image": Image.fromarray(
+                    np.random.randint(0, 256, (32, 32, 3), np.uint8)
+                ),
+                "class": np.random.randint(10),
+            }
+            out.write(sample)
+```
+
+**Key parameters**:
+- `columns`: Schema definition with field types
+- `compression`: Algorithm (zstd, gzip, snappy, none)
+- `out`: Local directory path
+
+### Supported Data Types
+
+| Type | Description | Example |
+|------|-------------|----------|
+| `int` | Integer values | Labels, IDs |
+| `str` | Text strings | Prompts, captions |
+| `bytes` | Raw bytes | Custom encodings |
+| `jpeg` | JPEG images | Photos |
+| `png` | PNG images | Graphics |
+| `pkl` | Pickle objects | Complex types |
+| `json` | JSON objects | Metadata |
+
+### Upload to Cloud Storage
+
+<Steps>
+  <Step title="Create bucket">
+    ```bash
+    export AWS_ACCESS_KEY_ID=minioadmin
+    export AWS_SECRET_ACCESS_KEY=minioadmin
+    export AWS_ENDPOINT_URL=http://127.0.0.1:9000
+    
+    aws s3api create-bucket --bucket datasets
+    ```
+  </Step>
+  
+  <Step title="Generate data">
+    ```bash
+    python streaming-dataset/mock_data.py create-data \
+      --path-to-save random-data
+    ```
+  </Step>
+  
+  <Step title="Upload to S3">
+    ```bash
+    aws s3 cp --recursive random-data s3://datasets/random-data
+    ```
+  </Step>
+</Steps>
+
+### Consuming Streaming Data
+
+Load and train from remote storage:
+
+```python streaming-dataset/mock_data.py
+from pathlib import Path
+from streaming import StreamingDataset
+from torch.utils.data import DataLoader
+
+def get_dataloader(
+    remote: str = "s3://datasets/random-data",
+    local_cache: Path = Path("cache")
+):
+    # Create streaming dataset
+    dataset = StreamingDataset(
+        local=str(local_cache),
+        remote=remote,
+        shuffle=True
+    )
+    
+    print(f"Dataset: {dataset}")
+    
+    # Access individual samples
+    sample = dataset[42]
+    print(f"Image: {sample['image']}, Class: {sample['class']}")
+    
+    # Create DataLoader
+    dataloader = DataLoader(dataset, batch_size=32, num_workers=4)
+    print(f"DataLoader: {dataloader}")
+    
+    return dataloader
+```
+
+### CLI Usage
+
+Create and consume data:
+
+```bash
+# Create dataset locally
+python streaming-dataset/mock_data.py create-data --path-to-save random-data
+
+# Read from remote
+python streaming-dataset/mock_data.py get-dataloader --remote random-data
+```
+
+## Training Integration
+
+Integrate with PyTorch training loops:
+
+```python
+from streaming import StreamingDataset
+from torch.utils.data import DataLoader
+import torch
+
+# Setup dataset
+dataset = StreamingDataset(
+    local="./cache",
+    remote="s3://datasets/training-data",
+    shuffle=True,
+    shuffle_seed=42,  # Deterministic shuffling
+    batch_size=64
+)
+
+# Create DataLoader
+loader = DataLoader(
+    dataset,
+    batch_size=64,
+    num_workers=8,
+    pin_memory=True
+)
+
+# Training loop
+for epoch in range(num_epochs):
+    for batch in loader:
+        images = batch['image']
+        labels = batch['class']
+        
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        
+        # Backward pass
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+```
+
+## Advanced Features
+
+<AccordionGroup>
+  <Accordion title="Deterministic Shuffling">
+    Control shuffle behavior across epochs:
+    
+    ```python
+    dataset = StreamingDataset(
+        local="./cache",
+        remote="s3://data",
+        shuffle=True,
+        shuffle_algo='naive',  # or 'py1b', 'py1s', 'py2s'
+        shuffle_seed=42,
+        shuffle_block_size=1 << 18
+    )
+    ```
+    
+    Benefits:
+    - Reproducible training runs
+    - Different shuffle per epoch
+    - Efficient block-level shuffling
+  </Accordion>
+  
+  <Accordion title="Multi-Node Training">
+    Shard data across workers:
+    
+    ```python
+    dataset = StreamingDataset(
+        local="./cache",
+        remote="s3://data",
+        partition_algo='orig',  # Partition strategy
+        num_canonical_nodes=4,  # Physical nodes
+        batch_size=64
+    )
+    ```
+    
+    Automatically handles:
+    - Data sharding per worker
+    - Epoch boundaries
+    - Sample uniqueness
+  </Accordion>
+  
+  <Accordion title="Caching Strategy">
+    Control local cache behavior:
+    
+    ```python
+    dataset = StreamingDataset(
+        local="./cache",
+        remote="s3://data",
+        cache_limit="100gb",  # Max cache size
+        download_retry=3,     # Retry failed downloads
+        download_timeout=120  # Timeout per download
+    )
+    ```
+    
+    Cache is managed via LRU eviction.
+  </Accordion>
+  
+  <Accordion title="Profiling">
+    Monitor download and processing:
+    
+    ```python
+    import streaming.profiler as profiler
+    
+    with profiler.profile() as prof:
+        for batch in dataloader:
+            process(batch)
+    
+    prof.print_stats()
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Alternative Solutions
+
+<Tabs>
+  <Tab title="TFRecord">
+    TensorFlow's format for efficient serialization:
+    
+    ```python
+    import tensorflow as tf
+    
+    # Write
+    with tf.io.TFRecordWriter('data.tfrecord') as writer:
+        for sample in dataset:
+            example = tf.train.Example(
+                features=tf.train.Features(
+                    feature={
+                        'image': _bytes_feature(sample['image']),
+                        'label': _int64_feature(sample['label']),
+                    }
+                )
+            )
+            writer.write(example.SerializeToString())
+    
+    # Read
+    dataset = tf.data.TFRecordDataset('data.tfrecord')
+    ```
+    
+    [TFRecord Tutorial](https://www.tensorflow.org/tutorials/load_data/tfrecord)
+  </Tab>
+  
+  <Tab title="WebDataset">
+    TAR-based format for web-scale datasets:
+    
+    ```python
+    import webdataset as wds
+    
+    # Write
+    with wds.TarWriter("output.tar") as sink:
+        for sample in data:
+            sink.write({
+                "__key__": sample["id"],
+                "jpg": sample["image"],
+                "cls": sample["label"],
+            })
+    
+    # Read
+    dataset = wds.WebDataset("s3://bucket/data-{000..099}.tar")
+    ```
+    
+    [WebDataset GitHub](https://github.com/webdataset/webdataset)
+  </Tab>
+  
+  <Tab title="PyTorch S3 Plugin">
+    Direct S3 integration:
+    
+    ```python
+    from torch.utils.data import DataLoader
+    from s3_plugin import S3Dataset
+    
+    dataset = S3Dataset('s3://bucket/data/')
+    loader = DataLoader(dataset)
+    ```
+    
+    [PyTorch S3 Plugin](https://github.com/aws/amazon-s3-plugin-for-pytorch)
+  </Tab>
+  
+  <Tab title="DataTrove">
+    HuggingFace's data processing library:
+    
+    ```python
+    from datatrove import Pipeline
+    
+    pipeline = Pipeline(
+        source="s3://data",
+        steps=[...],
+        output="s3://processed"
+    )
+    pipeline.run()
+    ```
+    
+    [DataTrove GitHub](https://github.com/huggingface/datatrove)
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Shard Size" icon="box-open">
+    - Target 50-500MB per shard
+    - Balance parallelism vs overhead
+    - Consider download time
+  </Card>
+  
+  <Card title="Compression" icon="file-zipper">
+    - Use zstd for best ratio/speed
+    - Disable for pre-compressed data (JPEG)
+    - Test impact on throughput
+  </Card>
+  
+  <Card title="Caching" icon="hard-drive">
+    - Size cache > single epoch
+    - Use fast local storage (SSD)
+    - Monitor cache hit rate
+  </Card>
+  
+  <Card title="Workers" icon="users">
+    - Match to CPU cores
+    - Increase for I/O-bound tasks
+    - Profile to find optimal count
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [MosaicML Streaming Docs](https://docs.mosaicml.com/projects/streaming)
+- [High Performance I/O For Large Scale Deep Learning (PDF)](https://arxiv.org/pdf/2001.01858.pdf)
+- [Efficient PyTorch I/O Library](https://pytorch.org/blog/efficient-pytorch-io-library-for-large-datasets-many-files-many-gpus/)
+- [Announcing CPP-based S3 IO DataPipes](https://pytorch.org/blog/announcing-cpp/)
+
+## Next Steps
+
+- Explore [Vector Databases](/modules/module-2/vector-databases) for embeddings storage
+- Learn about [Data Labeling](/modules/module-2/labeling) workflows

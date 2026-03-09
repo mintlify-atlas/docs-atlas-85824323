@@ -1,0 +1,571 @@
+---
+title: "Practice Exercise"
+description: "Hands-on tasks to master containerization, Kubernetes, and CI/CD"
+---
+
+## Overview
+
+This practice module combines all concepts from Module 1 into real-world tasks. You'll draft an ML system design, containerize applications, build CI/CD pipelines, and deploy to Kubernetes.
+
+<Note>
+These exercises mirror real production scenarios. Take your time, experiment, and don't hesitate to reference the documentation pages.
+</Note>
+
+## Two-Part Structure
+
+Module 1 practice is divided into two major components:
+
+1. **H1: Initial Design Draft** - Plan your ML system architecture
+2. **H2: Infrastructure** - Implement containerization and deployment
+
+## H1: Initial Design Draft
+
+Before writing any code, design your ML system. This is critical for production systems where poor architecture leads to technical debt.
+
+### Reading List
+
+<Steps>
+  <Step title="Core Reading">
+    - [Ml-design-docs](https://github.com/eugeneyan/ml-design-docs) - Templates and examples
+    - [How to Write Design Docs for Machine Learning Systems](https://eugeneyan.com/writing/ml-design-docs/) - Comprehensive guide
+    - [Design Docs at Google](https://www.industrialempathy.com/posts/design-docs-at-google/) - Industry practices
+  </Step>
+  
+  <Step title="Project Management">
+    - [How Big Tech Runs Tech Projects and the Curious Absence of Scrum](https://newsletter.pragmaticengineer.com/p/project-management-in-tech)
+    - [Continuous Delivery for Machine Learning](https://martinfowler.com/articles/cd4ml.html)
+  </Step>
+  
+  <Step title="Best Practices">
+    - [Best practices for implementing machine learning on Google Cloud](https://cloud.google.com/architecture/ml-on-gcp-best-practices)
+    - [MLOps Infrastructure Stack](https://ml-ops.org/content/state-of-mlops)
+  </Step>
+  
+  <Step title="Technical Debt & Testing">
+    - [The ML Test Score: A Rubric for ML Production Readiness](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/aad9f93b86b7addfea4c419b9100c6cdd26cacea.pdf)
+    - [datascience-fails](https://github.com/xLaszlo/datascience-fails) - Common pitfalls
+  </Step>
+  
+  <Step title="Practical Resources">
+    - [CS 329S Lecture 1. Machine Learning Systems in Production](https://docs.google.com/document/d/1C3dlLmFdYHJmACVkz99lSTUPF4XQbWb_Ah7mPE12Igo/edit#)
+    - [You Don't Need a Bigger Boat](https://github.com/jacopotagliabue/you-dont-need-a-bigger-boat) - Right-sized ML infrastructure
+    - [Why to Hire Machine Learning Engineers, Not Data Scientists](https://www.datarevenue.com/en-blog/hiring-machine-learning-engineers-instead-of-data-scientists)
+  </Step>
+</Steps>
+
+### Task: Write Your Design Document
+
+Create a comprehensive design document for an ML system using the [MLOps template](https://ml-ops.org/content/state-of-mlops). You can use a real system from your work or create a fictional but realistic one.
+
+**Your design doc must cover:**
+
+<Tabs>
+  <Tab title="Architecture">
+    **Models in Production**
+    - What models are deployed?
+    - How do they interact?
+    - Data flow and dependencies
+    
+    **Pros/Cons**
+    - Architecture strengths
+    - Known limitations
+    - Trade-offs made
+  </Tab>
+  
+  <Tab title="Operations">
+    **Scalability**
+    - Current capacity
+    - Scaling strategy
+    - Bottlenecks and mitigations
+    
+    **Usability**
+    - Developer experience
+    - Data scientist workflow
+    - Deployment process
+  </Tab>
+  
+  <Tab title="Planning">
+    **Costs**
+    - Infrastructure expenses
+    - Compute and storage breakdown
+    - Cost optimization opportunities
+    
+    **Evolution**
+    - Planned improvements
+    - Technical debt
+    - Migration strategy
+    
+    **Next Steps**
+    - Immediate action items
+    - Long-term roadmap
+  </Tab>
+  
+  <Tab title="Assessment">
+    **ML Test Score**
+    
+    Apply [Google's ML Test Score rubric](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/aad9f93b86b7addfea4c419b9100c6cdd26cacea.pdf):
+    - Feature and data tests
+    - Model development tests
+    - ML infrastructure tests
+    - Monitoring tests
+    
+    Score each category (0-4 points).
+    
+    **Failure Analysis**
+    
+    Review [datascience-fails](https://github.com/xLaszlo/datascience-fails) and identify potential issues in your design:
+    - Data leakage risks
+    - Training/serving skew
+    - Monitoring blind spots
+    - Scalability concerns
+    
+    **Business Metrics**
+    
+    Connect technical system to business value:
+    - KPIs affected by the ML system
+    - Expected impact on metrics
+    - ROI calculation
+    
+    Example: [AI for Aircraft Readiness](https://c3.ai/customers/ai-for-aircraft-readiness/)
+  </Tab>
+</Tabs>
+
+### Reference Design Example
+
+See this [example design document](https://docs.google.com/document/d/14YBYKgk-uSfjfwpKFlp_omgUq5hwMVazy_M965s_1KA/edit#heading=h.7nki9mck5t64) for inspiration.
+
+### Acceptance Criteria
+
+- ✅ **Approve** - Document thoroughly addresses all required sections
+- ❌ **No approval** - Missing critical sections or insufficient detail
+
+<Warning>
+You'll repeat this task at the end of the course for your final coursework. Use this practice to develop good habits and templates.
+</Warning>
+
+## H2: Infrastructure
+
+Now implement the infrastructure for your ML system using Docker, Kubernetes, and CI/CD.
+
+### Reading List
+
+<Steps>
+  <Step title="Docker Fundamentals">
+    - [0 to production-ready: Docker packaging best practices](https://www.youtube.com/watch?v=EC0CSevbt9k) - Video
+    - [Docker and Python: Data Science and ML](https://www.youtube.com/watch?v=Jq68axbKIbg) - Video
+    - [Docker introduction](https://docker-curriculum.com/) - Tutorial
+    - [Overview of Docker Hub](https://docs.docker.com/docker-hub/) - Registry guide
+  </Step>
+  
+  <Step title="CI/CD">
+    - [Introduction to GitHub Actions](https://docs.docker.com/build/ci/github-actions/)
+    - [Course: CI/CD for Machine Learning (GitOps)](https://www.wandb.courses/courses/ci-cd-for-machine-learning) - Free W&B course
+  </Step>
+  
+  <Step title="Kubernetes">
+    - [Learn Kubernetes Basics](https://kubernetes.io/docs/tutorials/kubernetes-basics/) - Official tutorial
+    - [Hello Minikube](https://kubernetes.io/docs/tutorials/hello-minikube/) - Quick start
+    - [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/) - Local clusters
+    - [Book: Kubernetes in Action](https://www.manning.com/books/kubernetes-in-action) - Comprehensive guide
+  </Step>
+  
+  <Step title="Advanced Topics">
+    - [Why data scientists shouldn't need to know Kubernetes](https://huyenchip.com/2021/09/13/data-science-infrastructure.html)
+    - [Scaling Kubernetes to 7,500 nodes](https://openai.com/research/scaling-kubernetes-to-7500-nodes) - OpenAI case study
+  </Step>
+</Steps>
+
+### Task Breakdown
+
+Complete these three pull requests to your repository:
+
+<Steps>
+  <Step title="PR1: Dockerfile and Registry">
+    Create a Dockerfile for a simple ML application and push to a container registry.
+    
+    **Requirements:**
+    - Write a Dockerfile with a basic web server or ML script
+    - Push image to GitHub Container Registry (ghcr.io) or Docker Hub
+    - Tag image appropriately (e.g., `v1.0.0`, `latest`)
+    
+    **Example structure:**
+    ```dockerfile
+    FROM python:3.12-slim
+    
+    WORKDIR /app
+    
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+    
+    COPY app.py .
+    
+    CMD ["python", "app.py"]
+    ```
+    
+    **Verification:**
+    ```bash
+    # Pull and run your image
+    docker pull ghcr.io/yourusername/app:latest
+    docker run --rm ghcr.io/yourusername/app:latest
+    ```
+  </Step>
+  
+  <Step title="PR2: GitHub Actions CI/CD">
+    Create a GitHub Actions workflow that builds and pushes your Docker image on every PR.
+    
+    **Requirements:**
+    - Workflow triggers on pull requests
+    - Builds Docker image
+    - Runs basic tests (if applicable)
+    - Pushes to container registry
+    - Displays green checkmark on success
+    
+    **Starter workflow:**
+    ```yaml
+    name: CI/CD Pipeline
+    
+    on:
+      pull_request:
+        branches: [main]
+      push:
+        branches: [main]
+    
+    jobs:
+      build-and-push:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: read
+          packages: write
+        
+        steps:
+          - uses: actions/checkout@v4
+          
+          - name: Log in to registry
+            uses: docker/login-action@v2
+            with:
+              registry: ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ secrets.GITHUB_TOKEN }}
+          
+          - name: Build and push
+            uses: docker/build-push-action@v4
+            with:
+              context: .
+              push: true
+              tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
+    ```
+    
+    **Verification:**
+    - Check the "Actions" tab in GitHub
+    - Ensure workflow completes successfully
+    - Verify image appears in GitHub Packages
+  </Step>
+  
+  <Step title="PR3: Kubernetes Manifests">
+    Write Kubernetes YAML definitions and test on a local cluster.
+    
+    **Requirements:**
+    Create manifests for:
+    - **Pod**: Single container instance
+    - **Deployment**: Replicated application
+    - **Service**: Network access to deployment
+    - **Job**: One-time batch task
+    
+    **File structure:**
+    ```
+    k8s/
+    ├── pod.yaml
+    ├── deployment.yaml
+    ├── service.yaml
+    └── job.yaml
+    ```
+    
+    **Example Deployment:**
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ml-app
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app: ml-app
+      template:
+        metadata:
+          labels:
+            app: ml-app
+        spec:
+          containers:
+          - name: app
+            image: ghcr.io/yourusername/app:latest
+            ports:
+            - containerPort: 8080
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+    ```
+    
+    **Testing with kind:**
+    ```bash
+    # Create cluster
+    kind create cluster --name ml-test
+    
+    # Deploy resources
+    kubectl apply -f k8s/
+    
+    # Verify
+    kubectl get all
+    kubectl logs deployment/ml-app
+    
+    # Test service
+    kubectl port-forward svc/ml-app 8080:8080
+    curl http://localhost:8080
+    ```
+  </Step>
+</Steps>
+
+### Bonus: Install k9s
+
+Install [k9s](https://k9scli.io/) for a better Kubernetes management experience:
+
+```bash
+brew install derailed/k9s/k9s
+k9s
+```
+
+**k9s shortcuts:**
+- `:pods` - View pods
+- `:deploy` - View deployments
+- `:svc` - View services
+- `:jobs` - View jobs
+- `l` - View logs
+- `d` - Describe resource
+- `ctrl-d` - Delete resource
+
+<Note>
+k9s dramatically improves Kubernetes debugging productivity. It's the first tool experienced developers install.
+</Note>
+
+### Acceptance Criteria
+
+✅ **Pass** - All three PRs meet requirements:
+
+1. **PR1**: 
+   - Dockerfile builds successfully
+   - Image pushed to registry
+   - Image runs correctly when pulled
+
+2. **PR2**:
+   - GitHub Actions workflow exists
+   - Workflow runs on PRs
+   - All jobs complete successfully (green checkmark)
+
+3. **PR3**:
+   - All four resource types defined (Pod, Deployment, Service, Job)
+   - Resources deploy to kind/minikube successfully
+   - Application accessible via Service
+
+## Tips and Common Issues
+
+### Docker Troubleshooting
+
+<Tabs>
+  <Tab title="Build Failures">
+    ```bash
+    # Clear cache and rebuild
+    docker builder prune -a
+    docker build --no-cache -t app:latest .
+    
+    # Check build context size
+    docker build -t app:latest . --progress=plain
+    ```
+  </Tab>
+  
+  <Tab title="Registry Auth">
+    ```bash
+    # GitHub Container Registry
+    echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+    
+    # Verify login
+    docker pull ghcr.io/yourusername/test:latest
+    ```
+  </Tab>
+  
+  <Tab title="Image Size">
+    ```dockerfile
+    # Use slim base images
+    FROM python:3.12-slim
+    
+    # Multi-stage builds
+    FROM python:3.12 as builder
+    RUN pip install --user package
+    
+    FROM python:3.12-slim
+    COPY --from=builder /root/.local /root/.local
+    ```
+  </Tab>
+</Tabs>
+
+### Kubernetes Troubleshooting
+
+<Tabs>
+  <Tab title="Pod Won't Start">
+    ```bash
+    # Check pod status
+    kubectl describe pod pod-name
+    
+    # View events
+    kubectl get events --sort-by=.metadata.creationTimestamp
+    
+    # Check logs
+    kubectl logs pod-name
+    kubectl logs pod-name --previous  # If pod crashed
+    ```
+  </Tab>
+  
+  <Tab title="Image Pull Errors">
+    ```bash
+    # Make image public in GitHub
+    # Or create image pull secret
+    kubectl create secret docker-registry ghcr-secret \
+      --docker-server=ghcr.io \
+      --docker-username=USERNAME \
+      --docker-password=$GITHUB_TOKEN
+    
+    # Reference in pod spec
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+    ```
+  </Tab>
+  
+  <Tab title="Service Not Accessible">
+    ```bash
+    # Check service endpoints
+    kubectl get endpoints service-name
+    
+    # Verify labels match
+    kubectl get pods --show-labels
+    
+    # Test from within cluster
+    kubectl run -it --rm debug --image=alpine --restart=Never -- sh
+    wget -O- http://service-name:8080
+    ```
+  </Tab>
+</Tabs>
+
+### GitHub Actions Troubleshooting
+
+<Tabs>
+  <Tab title="Workflow Won't Run">
+    - Check trigger conditions (branch names, paths)
+    - Verify YAML syntax (use VS Code extension)
+    - Look for typos in `on:` triggers
+  </Tab>
+  
+  <Tab title="Permission Denied">
+    ```yaml
+    # Add required permissions
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # For OIDC auth
+    ```
+  </Tab>
+  
+  <Tab title="Secrets Not Available">
+    - `GITHUB_TOKEN` is automatic (no setup needed)
+    - Custom secrets: Settings → Secrets → Actions
+    - Organization secrets may need approval
+  </Tab>
+</Tabs>
+
+## Example Repository Structure
+
+```
+your-repo/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yaml
+├── k8s/
+│   ├── pod.yaml
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── job.yaml
+├── app/
+│   ├── __init__.py
+│   └── main.py
+├── tests/
+│   └── test_app.py
+├── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
+## Submission Checklist
+
+Before marking this module complete, ensure:
+
+- [ ] Design document covers all required sections
+- [ ] Design includes ML Test Score assessment
+- [ ] Design identifies potential failure modes
+- [ ] Design connects to business metrics
+- [ ] PR1: Dockerfile committed and image in registry
+- [ ] PR2: GitHub Actions workflow runs successfully
+- [ ] PR3: All Kubernetes manifests deploy successfully
+- [ ] All three PRs merged to main branch
+- [ ] CI/CD pipeline shows green status
+- [ ] k9s tool installed (optional but recommended)
+
+## Additional Practice Ideas
+
+Want to go deeper? Try these extensions:
+
+1. **Multi-environment setup**: Create separate namespaces for dev/staging/prod
+2. **Secrets management**: Use Kubernetes Secrets for API keys
+3. **Monitoring**: Add Prometheus/Grafana for metrics
+4. **GitOps**: Implement ArgoCD for declarative deployments
+5. **Helm charts**: Package your application as a Helm chart
+6. **Integration tests**: Add end-to-end tests to CI/CD
+7. **Canary deployments**: Implement gradual rollouts
+
+## Resources
+
+All reading materials mentioned above, plus:
+
+- [Module 1 Overview](/modules/module-1/overview) - Refresh core concepts
+- [Docker Documentation](/modules/module-1/docker) - Container deep dive
+- [Kubernetes Documentation](/modules/module-1/kubernetes) - Orchestration details
+- [CI/CD Documentation](/modules/module-1/cicd) - Pipeline patterns
+- [Serverless Alternatives](/modules/module-1/serverless) - Optional simpler approaches
+
+## Getting Help
+
+If you're stuck:
+
+1. **Check logs**: Most issues reveal themselves in logs
+2. **Search GitHub Issues**: Others have likely hit the same problem
+3. **Use k9s**: Visual debugging is often faster
+4. **Start simple**: Get basic version working, then add complexity
+5. **Ask for help**: Share your error messages and what you've tried
+
+<Note>
+Production infrastructure is complex. It's normal to encounter issues. Each problem you solve teaches you something valuable.
+</Note>
+
+## Next Steps
+
+Congratulations on completing Module 1! You now understand:
+
+- How to containerize ML applications
+- Kubernetes orchestration fundamentals
+- CI/CD automation with GitHub Actions
+- Serverless alternatives for simpler deployments
+- How to design production ML systems
+
+Continue to Module 2 to learn about [data management and versioning](/modules/module-2/overview), or revisit any topics that need reinforcement.

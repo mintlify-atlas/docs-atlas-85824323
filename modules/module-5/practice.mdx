@@ -1,0 +1,592 @@
+---
+title: "Module 5 Practice"
+description: "Hands-on tasks for model serving with APIs, UIs, and inference servers"
+---
+
+## Overview
+
+This module includes two homework assignments focused on deploying ML models through various serving approaches:
+
+- **H9**: API and UI serving with FastAPI, Streamlit, and Gradio
+- **H10**: Inference servers with Seldon, KServe, Triton, Ray, and vLLM
+
+## H9: API Serving
+
+### Learning Objectives
+
+<CardGroup cols={2}>
+  <Card title="REST APIs" icon="bolt">
+    Build production-ready APIs with FastAPI
+  </Card>
+  <Card title="Web UIs" icon="desktop">
+    Create interactive interfaces with Streamlit/Gradio
+  </Card>
+  <Card title="Testing" icon="vial">
+    Write comprehensive integration tests
+  </Card>
+  <Card title="Kubernetes" icon="cloud">
+    Deploy services to K8s with proper manifests
+  </Card>
+</CardGroup>
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Core Concepts">
+    - [CS 329S Lecture 8: Model Deployment](https://docs.google.com/document/d/1hNuW6bqWYZjlwpit_8W1cu7kllb-jTfy3Liof1GJWug/edit)
+    - [Machine Learning Systems Design](https://docs.google.com/presentation/d/1U_zKs19VLJKnGE02JDRnzxJ8lgeVF22WSZ_GrA646fY/edit)
+    - [APIs for Model Serving](https://madewithml.com/courses/mlops/api/)
+  </Accordion>
+  
+  <Accordion title="API Design">
+    - [RESTful API Design Tips](https://github.com/peterboyer/restful-api-design-tips)
+    - [Zalando API Guidelines](https://github.com/zalando/restful-api-guidelines)
+  </Accordion>
+  
+  <Accordion title="UI Frameworks">
+    - [Create an App with Streamlit](https://docs.streamlit.io/get-started/tutorials/create-an-app)
+    - [Gradio Quickstart](https://www.gradio.app/guides/quickstart)
+  </Accordion>
+  
+  <Accordion title="Deployment">
+    - [Kubernetes Deployment Strategies](https://codefresh.io/learn/kubernetes-deployment/top-6-kubernetes-deployment-strategies-and-how-to-choose/)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="PR1: Streamlit UI">
+    **Objective**: Create an interactive web UI for your model
+    
+    **Requirements:**
+    - Single prediction interface with text input
+    - Batch prediction with CSV upload
+    - Unit tests for both interfaces
+    - CI integration (pytest in GitHub Actions)
+    
+    **Reference implementation:**
+    ```python serving/ui_app.py
+    import streamlit as st
+    from serving.predictor import Predictor
+    
+    @st.cache_data
+    def get_model():
+        return Predictor.default_from_model_registry()
+    
+    def single_pred():
+        input_sent = st.text_input("Type english sentence")
+        if st.button("Run inference"):
+            pred = predictor.predict([input_sent])
+            st.write("Pred:", pred)
+    ```
+    
+    **Testing:**
+    ```python
+    from streamlit.testing.v1 import AppTest
+    
+    def test_single_prediction():
+        at = AppTest.from_file("serving/ui_app.py")
+        at.run()
+        at.text_input[0].set_value("test").run()
+        at.button[0].click().run()
+        assert "Pred:" in at.text[0].value
+    ```
+  </Step>
+  
+  <Step title="PR2: Gradio UI">
+    **Objective**: Build alternative UI with Gradio
+    
+    **Requirements:**
+    - Similar functionality to Streamlit
+    - Component-based interface
+    - Tests with `gr.Interface.test_launch()`
+    - CI integration
+    
+    **Example:**
+    ```python
+    import gradio as gr
+    from serving.predictor import Predictor
+    
+    predictor = Predictor.default_from_model_registry()
+    
+    def predict(text):
+        return predictor.predict([text])[0].tolist()
+    
+    interface = gr.Interface(
+        fn=predict,
+        inputs=gr.Textbox(label="Input text"),
+        outputs=gr.Label(label="Predictions")
+    )
+    
+    if __name__ == "__main__":
+        interface.launch()
+    ```
+  </Step>
+  
+  <Step title="PR3: FastAPI Server">
+    **Objective**: Implement production-ready REST API
+    
+    **Requirements:**
+    - Pydantic models for validation
+    - `/health_check` endpoint
+    - `/predict` endpoint with batch support
+    - Comprehensive tests with TestClient
+    - CI integration
+    
+    **Reference:**
+    ```python serving/fast_api.py
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+    
+    class Payload(BaseModel):
+        text: List[str]
+    
+    app = FastAPI()
+    
+    @app.get("/health_check")
+    def health_check() -> str:
+        return "ok"
+    
+    @app.post("/predict")
+    def predict(payload: Payload):
+        prediction = predictor.predict(text=payload.text)
+        return {"probs": prediction.tolist()}
+    ```
+    
+    **Testing:**
+    ```python tests/test_fast_api.py
+    from fastapi.testclient import TestClient
+    
+    def test_predict():
+        response = client.post("/predict", json={"text": ["test"]})
+        assert response.status_code == 200
+        assert len(response.json()["probs"][0]) == 2
+    ```
+  </Step>
+  
+  <Step title="PR4: API Kubernetes Deployment">
+    **Objective**: Deploy FastAPI to Kubernetes
+    
+    **Requirements:**
+    - Deployment manifest with 2+ replicas
+    - Service manifest (ClusterIP)
+    - ConfigMaps for configuration
+    - Secrets for API keys (W&B)
+    - Resource limits/requests
+    
+    **Example:**
+    ```yaml k8s/app-fastapi.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: app-fastapi
+    spec:
+      replicas: 2
+      template:
+        spec:
+          containers:
+          - name: app-fastapi
+            image: your-registry/app-fastapi:latest
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "1Gi"
+                cpu: "1000m"
+    ```
+  </Step>
+  
+  <Step title="PR5: UI Kubernetes Deployment">
+    **Objective**: Deploy Streamlit/Gradio to Kubernetes
+    
+    **Requirements:**
+    - Deployment manifest (single replica for session state)
+    - Service manifest
+    - Ingress configuration (optional)
+    - Health checks
+    
+    **Example:**
+    ```yaml k8s/app-streamlit.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: app-streamlit
+    spec:
+      replicas: 1  # Single replica for session state
+      template:
+        spec:
+          containers:
+          - name: app-streamlit
+            image: your-registry/app-streamlit:latest
+            livenessProbe:
+              httpGet:
+                path: /_stcore/health
+                port: 8080
+    ```
+  </Step>
+  
+  <Step title="Google Doc Update">
+    **Objective**: Document model serving plan
+    
+    **Include:**
+    - API design decisions (endpoints, formats)
+    - UI/UX considerations
+    - Deployment architecture
+    - Scaling strategy
+    - Monitoring plan
+    - Tradeoffs between serving options
+  </Step>
+</Steps>
+
+### Success Criteria
+
+<Check>
+- 5 PRs merged with passing CI
+- All tests pass (pytest, API tests, UI tests)
+- Deployments run successfully on K8s
+- Google doc includes serving architecture
+</Check>
+
+## H10: Inference Servers
+
+### Learning Objectives
+
+<CardGroup cols={2}>
+  <Card title="Production Serving" icon="server">
+    Deploy with Seldon, KServe, and Triton
+  </Card>
+  <Card title="Performance" icon="gauge">
+    Optimize throughput with batching and GPUs
+  </Card>
+  <Card title="LLM Serving" icon="brain">
+    Serve LLMs with vLLM and LoRA adapters
+  </Card>
+  <Card title="Comparison" icon="scale-balanced">
+    Evaluate tradeoffs between solutions
+  </Card>
+</CardGroup>
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Inference Servers">
+    - [ML System Design Patterns](https://github.com/mercari/ml-system-design-pattern)
+    - [Seldon Core v2](https://docs.seldon.io/projects/seldon-core/en/v2/)
+    - [Triton Inference Server](https://github.com/triton-inference-server/server)
+    - [Ray Serve](https://docs.ray.io/en/latest/serve/index.html)
+  </Accordion>
+  
+  <Accordion title="Cloud Platforms">
+    - [TorchServe](https://pytorch.org/serve/)
+    - [SageMaker Inference Toolkit](https://github.com/aws/sagemaker-inference-toolkit)
+    - [Vertex AI Predictions](https://cloud.google.com/vertex-ai/docs/predictions/overview)
+    - [Qwak Model Serving](https://www.qwak.com/platform/model-serving)
+  </Accordion>
+  
+  <Accordion title="LLM Serving">
+    - [vLLM Documentation](https://docs.vllm.ai/)
+    - [Text Generation Inference](https://github.com/huggingface/text-generation-inference)
+    - [LoRAX Multi-LoRA Server](https://github.com/predibase/lorax)
+    - [Modal Fast Inference](https://modal.com/docs/examples/vllm_inference)
+  </Accordion>
+  
+  <Accordion title="Edge Deployment">
+    - [Machine Learning Systems with TinyML](https://harvard-edge.github.io/cs249r_book/)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="PR1: Seldon API Deployment">
+    **Objective**: Deploy model with Seldon Core
+    
+    **Requirements:**
+    - Implement Seldon protocol wrapper
+    - Create SeldonDeployment manifest
+    - Write integration tests
+    - Document comparison with vanilla K8s deployment
+    
+    **Example:**
+    ```python serving/seldon_api.py
+    class SeldonModel:
+        def __init__(self):
+            self.predictor = Predictor.default_from_model_registry()
+        
+        def predict(self, X, features_names=None):
+            # X is numpy array or list
+            predictions = self.predictor.predict(X)
+            return predictions
+    ```
+  </Step>
+  
+  <Step title="PR2: KServe API Integration">
+    **Objective**: Deploy with KServe InferenceService
+    
+    **Requirements:**
+    - Implement KServe Model class
+    - Create InferenceService manifest
+    - Test V1/V2 inference protocol
+    - Configure autoscaling
+    
+    **Reference:** See [KServe documentation](/modules/module-5/kserve)
+  </Step>
+  
+  <Step title="PR3: Triton Inference Server">
+    **Objective**: Deploy with NVIDIA Triton
+    
+    **Requirements:**
+    - Implement PyTriton wrapper
+    - Configure dynamic batching
+    - Create model configuration
+    - Write client tests
+    - Measure throughput improvements
+    
+    **Reference:** See [Triton documentation](/modules/module-5/triton)
+  </Step>
+  
+  <Step title="PR4: Ray Deployment">
+    **Objective**: Deploy with Ray Serve
+    
+    **Requirements:**
+    - Create Ray Serve deployment
+    - Configure replicas and resources
+    - Implement model batching
+    - Test auto-scaling behavior
+    
+    **Example:**
+    ```python
+    from ray import serve
+    
+    @serve.deployment(num_replicas=2)
+    class ModelDeployment:
+        def __init__(self):
+            self.predictor = Predictor.default_from_model_registry()
+        
+        async def __call__(self, request):
+            text = await request.json()
+            predictions = self.predictor.predict(text["instances"])
+            return {"predictions": predictions.tolist()}
+    ```
+  </Step>
+  
+  <Step title="PR5: LLM Deployment with vLLM (Optional)">
+    **Objective**: Serve LLMs with vLLM and LoRA adapters
+    
+    **Requirements:**
+    - Deploy vLLM server with base model
+    - Implement adapter loading client
+    - Create K8s manifest with GPU support
+    - Document adapter management workflow
+    
+    **Reference:** See [vLLM documentation](/modules/module-5/vllm)
+  </Step>
+  
+  <Step title="PR6: Modal Deployment (Optional)">
+    **Objective**: Deploy LLM on Modal serverless platform
+    
+    **Requirements:**
+    - Create Modal app definition
+    - Configure GPU resources
+    - Implement API endpoint
+    - Compare cost vs K8s deployment
+    
+    **Example:**
+    ```python
+    import modal
+    
+    stub = modal.Stub("llm-inference")
+    
+    @stub.function(
+        gpu="A10G",
+        image=modal.Image.debian_slim().pip_install("vllm")
+    )
+    def generate(prompt: str) -> str:
+        from vllm import LLM
+        llm = LLM("microsoft/Phi-3-mini-4k-instruct")
+        outputs = llm.generate([prompt])
+        return outputs[0].outputs[0].text
+    ```
+  </Step>
+  
+  <Step title="Google Doc: Comparison Analysis">
+    **Objective**: Compare serving solutions and justify choice
+    
+    **Include:**
+    - Feature comparison table
+    - Performance benchmarks (latency, throughput)
+    - Cost analysis (infrastructure, maintenance)
+    - Operational complexity
+    - Scaling characteristics
+    - **Final recommendation** with justification
+    
+    **Comparison dimensions:**
+    - Setup complexity
+    - Performance (GPU utilization, latency)
+    - Scalability (autoscaling, multi-model)
+    - Monitoring and observability
+    - Ecosystem and community support
+  </Step>
+</Steps>
+
+### Success Criteria
+
+<Check>
+- 6 PRs merged (4 required + 2 optional)
+- All inference servers deploy successfully
+- Tests pass for each implementation
+- Google doc includes comprehensive comparison
+- Final serving solution chosen with justification
+</Check>
+
+## Testing Checklist
+
+### API Testing
+
+```python tests/test_endpoints.py
+import pytest
+from fastapi.testclient import TestClient
+
+def test_health_check():
+    """Verify service is running"""
+    response = client.get("/health_check")
+    assert response.status_code == 200
+
+def test_predict_single():
+    """Test single prediction"""
+    response = client.post("/predict", json={"text": ["test"]})
+    assert response.status_code == 200
+    assert "probs" in response.json()
+
+def test_predict_batch():
+    """Test batch prediction"""
+    response = client.post("/predict", json={"text": ["test1", "test2"]})
+    assert len(response.json()["probs"]) == 2
+
+def test_invalid_input():
+    """Test error handling"""
+    response = client.post("/predict", json={"invalid": "data"})
+    assert response.status_code == 422
+```
+
+### Kubernetes Testing
+
+```bash
+# Deployment health
+kubectl get deployments
+kubectl describe deployment app-fastapi
+
+# Pod status
+kubectl get pods -l app=app-fastapi
+kubectl logs -l app=app-fastapi
+
+# Service connectivity
+kubectl get services
+kubectl port-forward svc/app-fastapi 8080:8080
+curl http://localhost:8080/health_check
+
+# Resource usage
+kubectl top pods -l app=app-fastapi
+```
+
+### Performance Testing
+
+```python
+import time
+import statistics
+
+def benchmark_latency(endpoint: str, n_requests: int = 100):
+    latencies = []
+    for _ in range(n_requests):
+        start = time.time()
+        response = requests.post(endpoint, json={"text": ["test"]})
+        latencies.append(time.time() - start)
+    
+    print(f"Mean latency: {statistics.mean(latencies):.3f}s")
+    print(f"P95 latency: {statistics.quantiles(latencies, n=20)[18]:.3f}s")
+    print(f"P99 latency: {statistics.quantiles(latencies, n=100)[98]:.3f}s")
+```
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Model loading fails">
+    **Symptoms:** Container crashes on startup
+    
+    **Solutions:**
+    - Check W&B credentials: `kubectl get secret wandb -o yaml`
+    - Verify model path: `kubectl exec <pod> -- ls /tmp/model`
+    - Increase memory limits in deployment
+    - Check logs: `kubectl logs <pod>`
+  </Accordion>
+  
+  <Accordion title="Predictions are slow">
+    **Symptoms:** High latency (>1s for small inputs)
+    
+    **Solutions:**
+    - Enable batching in inference server
+    - Add GPU resources to deployment
+    - Use model quantization (INT8)
+    - Implement model caching
+    - Check CPU/memory throttling
+  </Accordion>
+  
+  <Accordion title="Port forwarding fails">
+    **Symptoms:** Cannot connect to service
+    
+    **Solutions:**
+    - Verify service exists: `kubectl get svc`
+    - Check pod is running: `kubectl get pods`
+    - Use correct service port: Check manifest
+    - Try different local port: `kubectl port-forward svc/app 8081:8080`
+  </Accordion>
+</AccordionGroup>
+
+## Submission Guidelines
+
+<Steps>
+  <Step title="Code Quality">
+    - All tests pass locally and in CI
+    - Code follows project style (ruff format)
+    - No secrets committed to repository
+    - Dockerfiles build successfully
+  </Step>
+  
+  <Step title="Documentation">
+    - README explains how to run each service
+    - Kubernetes manifests have descriptive comments
+    - Google doc includes architecture diagrams
+    - API endpoints documented with examples
+  </Step>
+  
+  <Step title="Pull Requests">
+    - Title format: `[module-5] <description>`
+    - PR description explains changes
+    - Screenshots of running services
+    - Links to deployed endpoints (if applicable)
+  </Step>
+</Steps>
+
+## Resources
+
+### Documentation
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [KServe Documentation](https://kserve.github.io/website/)
+- [Triton Documentation](https://github.com/triton-inference-server/server)
+- [vLLM Documentation](https://docs.vllm.ai/)
+
+### Examples
+
+- [Made With ML: MLOps](https://madewithml.com/courses/mlops/)
+- [ML System Design Patterns](https://github.com/mercari/ml-system-design-pattern)
+- [Awesome Production Machine Learning](https://github.com/EthicalML/awesome-production-machine-learning)
+
+## Next Steps
+
+<Card title="Module 6: Monitoring" icon="chart-line" href="/modules/module-6/overview">
+  Learn to monitor models in production with metrics and alerts
+</Card>

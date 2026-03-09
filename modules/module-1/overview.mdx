@@ -1,0 +1,105 @@
+---
+title: "Module 1: Infrastructure Overview"
+description: "Learn containerization, Kubernetes orchestration, and CI/CD pipelines for ML systems"
+---
+
+## Introduction
+
+Module 1 introduces the foundational infrastructure concepts essential for deploying ML systems in production. You'll learn how to containerize applications, orchestrate workloads with Kubernetes, and automate deployment pipelines using CI/CD.
+
+<Note>
+This module focuses on practical, hands-on experience with Docker, Kubernetes, and GitHub Actions—the core technologies used in modern ML infrastructure.
+</Note>
+
+## What You'll Learn
+
+<Steps>
+  <Step title="Containerization with Docker">
+    Build and manage Docker images for ML applications, understand multi-stage builds, and push images to container registries.
+  </Step>
+  
+  <Step title="Kubernetes Orchestration">
+    Deploy applications using Pods, Jobs, Deployments, and Services on a local Kubernetes cluster with kind.
+  </Step>
+  
+  <Step title="CI/CD Automation">
+    Create GitHub Actions workflows to automatically build, test, and deploy containerized applications.
+  </Step>
+  
+  <Step title="Serverless Options">
+    Explore serverless alternatives like Modal and Railway for simpler ML deployment scenarios.
+  </Step>
+</Steps>
+
+## Module Architecture
+
+This module includes two sample applications that demonstrate containerization patterns:
+
+- **app-ml**: A simple ML training job that simulates model training and outputs metrics
+- **app-web**: A basic web server for serving ML models or APIs
+
+Both applications are containerized and can be deployed to Kubernetes or serverless platforms.
+
+## Learning Path
+
+Follow this recommended sequence to get the most out of Module 1:
+
+1. **[Docker Fundamentals](/modules/module-1/docker)** - Start with containerization basics
+2. **[Kubernetes Deployment](/modules/module-1/kubernetes)** - Learn orchestration and scaling
+3. **[CI/CD with GitHub Actions](/modules/module-1/cicd)** - Automate your workflows
+4. **[Serverless Alternatives](/modules/module-1/serverless)** - Explore simpler deployment options
+5. **[Practice Exercise](/modules/module-1/practice)** - Apply what you've learned
+
+## Prerequisites
+
+Before starting this module, ensure you have:
+
+- Basic understanding of command-line interfaces
+- Familiarity with Git and GitHub
+- Docker installed locally ([Docker Desktop](https://www.docker.com/products/docker-desktop))
+- kubectl CLI tool
+- A GitHub account for registry and CI/CD
+
+## Key Concepts
+
+### Containerization
+
+Containers package your application and all its dependencies into a single, portable unit that runs consistently across different environments.
+
+### Orchestration
+
+Kubernetes orchestrates containers at scale, handling deployment, scaling, networking, and self-healing automatically.
+
+### CI/CD
+
+Continuous Integration and Continuous Delivery pipelines automate testing, building, and deploying your applications, reducing manual errors and accelerating development.
+
+## Design Documentation
+
+<Warning>
+Before implementing any ML system, start with a design document. Module 1's practice task includes creating an MLOps design doc that covers architecture, scalability, costs, and technical debt.
+</Warning>
+
+A good design document should address:
+
+- Models in production architecture
+- Pros and cons of your approach
+- Scalability considerations
+- Usability and developer experience
+- Cost analysis
+- Evolution and maintenance plan
+- ML Test Score assessment
+
+## Resources
+
+Essential reading materials:
+
+- [ML Design Docs by Eugene Yan](https://github.com/eugeneyan/ml-design-docs)
+- [Docker Introduction Tutorial](https://docker-curriculum.com/)
+- [Kubernetes Basics](https://kubernetes.io/docs/tutorials/kubernetes-basics/)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [Continuous Delivery for Machine Learning](https://martinfowler.com/articles/cd4ml.html)
+
+## Next Steps
+
+Ready to get started? Head over to the [Docker page](/modules/module-1/docker) to begin building your first containerized ML application.

@@ -1,0 +1,363 @@
+---
+title: "Model Optimization"
+description: "Quantization, scaling strategies, and performance tuning for production ML systems"
+---
+
+## Why Optimization Matters
+
+**"Premature optimization is the root of all evil"** — Donald Knuth
+
+That said, once your system is working, optimization becomes critical:
+- **Cost**: GPU inference is expensive (A10G = $1.50/hour)
+- **Latency**: Users expect sub-second responses
+- **Throughput**: More requests per GPU = better economics
+- **Accessibility**: Smaller models run on cheaper hardware
+
+The goal: **Maintain accuracy while reducing cost/latency.**
+
+## Benchmarking First
+
+Always measure before optimizing:
+
+1. **Profile inference**: Where is time spent? (model forward pass, preprocessing, postprocessing)
+2. **Establish baseline**: Current throughput, latency, and cost
+3. **Load test**: Use realistic traffic patterns
+4. **Monitor resources**: GPU/CPU utilization, memory
+
+<CardGroup cols={2}>
+  <Card title="Locust" icon="chart-line">
+    Python-based load testing, great for ML APIs
+  </Card>
+  <Card title="K6" icon="gauge-high">
+    Go-based, better metrics and dashboards
+  </Card>
+  <Card title="Vegeta" icon="bolt">
+    CLI for quick HTTP load tests
+  </Card>
+  <Card title="ghz" icon="server">
+    gRPC load testing (for Triton)
+  </Card>
+</CardGroup>
+
+<Note>
+Run load tests in a staging environment that mirrors production. Don't trust local benchmarks.
+</Note>
+
+## Quantization
+
+Quantization reduces precision (32-bit → 8-bit or 4-bit), trading slight accuracy for speed and memory:
+
+**Module 6 Benchmark (Phi-3.5, 100 concurrent users):**
+
+| Method | Median Latency | GPU Memory | Accuracy Impact |
+|--------|----------------|------------|----------------|
+| FP32 (baseline) | 5600ms | 12 GB | — |
+| FP16 | 5000ms | 6 GB | Negligible |
+| FP8 | 5000ms | 3 GB | Less than 1% drop |
+| 8-bit (LLM.int8) | 13000ms | 3 GB | Less than 2% drop |
+| 4-bit NF4 | 8500ms | 2 GB | 2-5% drop |
+
+<Info>
+**FP8** and **FP16** are almost always safe. They're hardware-accelerated on modern GPUs (A100, H100) and have minimal accuracy impact.
+</Info>
+
+### Quantization Methods
+
+<CardGroup cols={2}>
+  <Card title="EETQ" icon="bolt">
+    8-bit quantization optimized for inference (fast, low memory)
+  </Card>
+  <Card title="bitsandbytes" icon="microchip">
+    LLM.int8 and 4-bit NF4/FP4 (good accuracy, slower)
+  </Card>
+  <Card title="GPTQ" icon="cube">
+    Post-training quantization with calibration dataset
+  </Card>
+  <Card title="AWQ" icon="shield">
+    Activation-aware quantization (better accuracy than GPTQ)
+  </Card>
+</CardGroup>
+
+**Using vLLM with quantization:**
+
+```bash
+vllm serve microsoft/Phi-3-mini-4k-instruct --quantize fp8
+```
+
+**Using bitsandbytes in code:**
+
+```python
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+quant_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type='nf4',
+    bnb_4bit_compute_dtype=torch.bfloat16
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    'microsoft/Phi-3-mini-4k-instruct',
+    quantization_config=quant_config
+)
+```
+
+<Note>
+For LLMs, start with FP8 or FP16. Only drop to 4-bit if you're memory-constrained. Always validate accuracy on your domain-specific eval set.
+</Note>
+
+## Horizontal Pod Autoscaling (HPA)
+
+HPA automatically scales replicas based on load:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-fastapi-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-fastapi
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+```
+
+K8s monitors CPU and adds/removes pods to maintain 50% average utilization.
+
+**Setup:**
+
+1. Install metrics-server: `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`
+2. Set resource requests in your Deployment
+3. Create HPA
+
+<Info>
+For GPU workloads, use custom metrics (requests per second, queue depth) instead of CPU. GPU utilization isn't exposed by default metrics-server.
+</Info>
+
+### KNative Autoscaling
+
+KServe uses KNative for scale-to-zero:
+
+```yaml
+metadata:
+  annotations:
+    autoscaling.knative.dev/minScale: "0"  # Scale to zero
+    autoscaling.knative.dev/maxScale: "10"
+    autoscaling.knative.dev/target: "100"  # Target concurrency
+```
+
+When idle, KNative terminates pods (saving costs). First request has cold start (~10s), but subsequent requests are fast.
+
+<Note>
+Scale-to-zero is great for development or low-traffic models. For production APIs, set `minScale: 1` to avoid cold starts.
+</Note>
+
+## Vertical Pod Autoscaling (VPA)
+
+VPA adjusts resource requests automatically:
+
+```yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: app-fastapi-vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-fastapi
+  updatePolicy:
+    updateMode: "Auto"  # Restart pods with new limits
+```
+
+VPA observes usage and recommends (or applies) new resource requests.
+
+<Info>
+Use HPA for horizontal scaling (more replicas) and VPA for vertical scaling (bigger pods). Don't use both on the same metric—they'll fight each other.
+</Info>
+
+## Model Compression
+
+### Distillation
+
+Train a smaller "student" model to mimic a larger "teacher":
+
+```python
+teacher_output = teacher_model(inputs)
+student_output = student_model(inputs)
+
+# Distillation loss
+loss = KL_divergence(student_output, teacher_output.detach())
+```
+
+**Examples:**
+- **DistilBERT**: 40% smaller than BERT, retains 97% accuracy
+- **DistilWhisper**: 6x faster speech recognition
+- **TinyLlama**: 1.1B parameters, trained on 3T tokens
+
+<Note>
+Distillation is powerful but requires significant compute for training. Quantization is faster to apply and often sufficient.
+</Note>
+
+### Pruning
+
+Remove unimportant weights:
+
+```python
+from torch.nn.utils import prune
+
+# Remove 30% of weights with lowest magnitude
+prune.l1_unstructured(model.layer1, name='weight', amount=0.3)
+prune.remove(model.layer1, 'weight')  # Make permanent
+```
+
+**Structured pruning** removes entire filters/channels (better for hardware acceleration).
+
+**Libraries:**
+- **Neural Compressor (Intel)**: Quantization + pruning + distillation
+- **SparseML (Neural Magic)**: Sparsity + quantization for CPUs
+- **PyTorch native**: `torch.nn.utils.prune`
+
+<Info>
+Pruning is most effective when combined with fine-tuning. Prune → fine-tune → repeat.
+</Info>
+
+## TensorRT for Maximum Performance
+
+TensorRT (NVIDIA) compiles models for optimized inference:
+
+```python
+import tensorrt as trt
+import torch
+
+# Export to ONNX first
+torch.onnx.export(model, dummy_input, 'model.onnx')
+
+# Convert to TensorRT
+logger = trt.Logger(trt.Logger.WARNING)
+builder = trt.Builder(logger)
+network = builder.create_network(...)
+parser = trt.OnnxParser(network, logger)
+with open('model.onnx', 'rb') as f:
+    parser.parse(f.read())
+
+engine = builder.build_cuda_engine(network)
+```
+
+**Optimizations:**
+- Kernel fusion (combine ops)
+- Precision calibration (INT8 quantization with minimal accuracy loss)
+- Layer-specific tuning
+
+**Speedups:**
+- 2-5x faster than PyTorch on same GPU
+- Essential for production at scale
+
+<Note>
+TensorRT is complex to set up. Use vLLM or Triton (which use TensorRT under the hood) for easier integration.
+</Note>
+
+## Batching Strategies
+
+### Static Batching
+
+Wait for N requests, then process as batch:
+
+```python
+queue = []
+
+while True:
+    queue.append(await get_request())
+    if len(queue) >= batch_size or time_since_last_batch > max_wait:
+        outputs = model(batch(queue))
+        send_responses(outputs)
+        queue.clear()
+```
+
+**Trade-offs:**
+- Larger batch = better throughput, worse latency for first request
+- Smaller batch = lower latency, worse GPU utilization
+
+### Continuous Batching (vLLM)
+
+vLLM dynamically adds/removes requests from batch:
+
+```
+Time 0: [Req1: token1, Req2: token1, Req3: token1]
+Time 1: [Req1: token2, Req2: token2, Req3: token2]  # Req3 finishes
+Time 2: [Req1: token3, Req2: token3, Req4: token1]  # New request added
+```
+
+This maximizes GPU utilization without increasing latency.
+
+<Info>
+For LLMs, continuous batching improves throughput by 10-20x compared to sequential processing.
+</Info>
+
+## Async Inference for Long Jobs
+
+For tasks > 30s:
+
+1. Client pushes job to queue (SQS, Redis)
+2. Workers poll queue and process
+3. Results stored in DB
+4. Client polls for result
+
+**Benefits:**
+- Client doesn't time out
+- Workers can be auto-scaled independently
+- Failed jobs can be retried
+
+**Example with Modal:**
+
+```python
+import modal
+
+stub = modal.Stub('async-inference')
+
+@stub.function(gpu='A10G')
+async def process_job(job_id, data):
+    result = model.predict(data)
+    db.save(job_id, result)
+
+@stub.local_entrypoint()
+def submit(data):
+    job_id = str(uuid.uuid4())
+    process_job.spawn(job_id, data)  # Async call
+    return job_id
+```
+
+## Hands-On Examples
+
+Explore optimization in [Module 6](/modules/module-6/overview):
+- Load test FastAPI and Triton with Locust/K6
+- Benchmark quantization methods (FP8, 4-bit, 8-bit)
+- Set up HPA with metrics-server
+- Implement async inference with SQS
+- Use KServe autoscaling
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" href="/concepts/monitoring" icon="chart-line">
+    Track optimization impact
+  </Card>
+  <Card title="Production Patterns" href="/concepts/production-patterns" icon="diagram-project">
+    Combine techniques for real systems
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [vLLM Quantization](https://docs.vllm.ai/en/latest/quantization/supported_hardware.html)
+- [Kubernetes HPA Walkthrough](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/)
+- [Hugging Face TGI Quantization](https://huggingface.co/docs/text-generation-inference/en/conceptual/quantization)
+- [Neural Compressor](https://github.com/intel/neural-compressor)

@@ -1,0 +1,507 @@
+---
+title: "Setup"
+description: "Detailed environment setup guide for ML in Production Practice"
+---
+
+This guide covers everything you need to set up a robust development environment for machine learning in production.
+
+## Python Environment
+
+### Requirements
+
+All modules in this course require **Python 3.10 or higher**. Some modules may require Python 3.12+ for specific features.
+
+<Steps>
+  <Step title="Verify your Python version">
+    ```bash
+    python3 --version
+    ```
+    
+    You should see Python 3.10.0 or higher. If not, [download the latest Python](https://www.python.org/downloads/).
+  </Step>
+  
+  <Step title="Install uv (recommended)">
+    For modern Python package management, install `uv` - a fast Python package installer:
+    
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+    
+    Alternatively, use pip:
+    ```bash
+    pip install uv
+    ```
+    
+    <Note>
+    `uv` is significantly faster than pip and handles dependency resolution more reliably. Several modules (like module-1) use `uv` by default.
+    </Note>
+  </Step>
+</Steps>
+
+### Virtual Environment Setup
+
+Each module is self-contained and should use its own virtual environment to avoid dependency conflicts.
+
+<Tabs>
+  <Tab title="Using venv (Standard)">
+    ```bash
+    # Create virtual environment
+    python3 -m venv venv
+    
+    # Activate on Linux/macOS
+    source venv/bin/activate
+    
+    # Activate on Windows
+    venv\Scripts\activate
+    
+    # Install dependencies
+    pip install -r requirements.txt
+    ```
+  </Tab>
+  
+  <Tab title="Using uv (Recommended)">
+    ```bash
+    # Create and activate virtual environment
+    uv venv
+    source .venv/bin/activate  # Linux/macOS
+    # or .venv\Scripts\activate on Windows
+    
+    # Install dependencies
+    uv pip install -r requirements.txt
+    ```
+  </Tab>
+  
+  <Tab title="Using conda">
+    ```bash
+    # Create environment
+    conda create -n ml-in-production python=3.10
+    conda activate ml-in-production
+    
+    # Install dependencies
+    pip install -r requirements.txt
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Always activate your virtual environment before installing packages or running code. This prevents system-wide package conflicts.
+</Warning>
+
+## Core Dependencies
+
+### Module 3: Training Workflows
+
+The classic example module requires transformer libraries and experiment tracking tools:
+
+```txt requirements.txt
+transformers==4.42.3
+datasets==2.15.0
+accelerate==0.32.1
+typer==0.6.1
+wandb==0.17.4
+ruff==0.5.0
+great-expectations==0.15.25
+pytest-cov==3.0.0
+```
+
+Install with:
+
+```bash
+cd module-3/classic-example
+pip install -r requirements.txt
+```
+
+<AccordionGroup>
+  <Accordion title="What each package does" icon="info">
+    - **transformers**: Hugging Face library for BERT, GPT, and other transformer models
+    - **datasets**: Easy loading and processing of ML datasets
+    - **accelerate**: Simplifies distributed training across GPUs
+    - **typer**: Build CLI applications with type hints
+    - **wandb**: Experiment tracking and model registry
+    - **ruff**: Fast Python linter and formatter (replaces flake8, black, isort)
+    - **great-expectations**: Data validation and testing
+    - **pytest-cov**: Code coverage reporting for tests
+  </Accordion>
+</AccordionGroup>
+
+### Module 5: Model Serving
+
+For deploying models as APIs:
+
+```bash
+cd module-5
+pip install -r requirements.txt
+```
+
+Key dependencies include:
+- `fastapi` - Modern web framework for building APIs
+- `uvicorn` - ASGI server for running FastAPI apps
+- `pydantic` - Data validation using Python type hints
+- `streamlit` - Build interactive web UIs for models
+
+## Development Tools
+
+### Code Formatting and Linting
+
+This repository uses **Ruff** for code quality. It's 10-100x faster than traditional tools.
+
+<CodeGroup>
+```bash Format Code
+ruff format .
+```
+
+```bash Check Style
+ruff check .
+```
+
+```bash Auto-fix Issues
+ruff check --fix .
+```
+</CodeGroup>
+
+<Tip>
+Configure your editor to run `ruff format` on save for automatic formatting.
+</Tip>
+
+### Testing
+
+Run tests using pytest:
+
+<CodeGroup>
+```bash Run All Tests
+pytest
+```
+
+```bash With Coverage
+pytest --cov=classic_example --cov-report=html
+```
+
+```bash Verbose Output
+pytest -vv
+```
+
+```bash Specific Module
+cd module-3/classic-example
+make test
+```
+</CodeGroup>
+
+## Experiment Tracking
+
+### Weights & Biases Setup
+
+Most training examples integrate with W&B for tracking experiments, metrics, and model artifacts.
+
+<Steps>
+  <Step title="Create W&B account">
+    Sign up for free at [wandb.ai](https://wandb.ai)
+  </Step>
+  
+  <Step title="Get your API key">
+    Visit [wandb.ai/authorize](https://wandb.ai/authorize) to get your API key
+  </Step>
+  
+  <Step title="Set environment variables">
+    ```bash
+    export WANDB_PROJECT=ml-in-production-practice
+    export WANDB_API_KEY=your_api_key_here
+    ```
+    
+    Or create a `.env` file:
+    ```bash .env
+    WANDB_PROJECT=ml-in-production-practice
+    WANDB_API_KEY=your_api_key_here
+    ```
+  </Step>
+  
+  <Step title="Verify the connection">
+    ```bash
+    python -c "import wandb; wandb.login()"
+    ```
+  </Step>
+</Steps>
+
+<Note>
+W&B is optional for local development but highly recommended for tracking experiments across multiple runs.
+</Note>
+
+## Container Tools (Module 1)
+
+### Docker Installation
+
+Required for containerization and Kubernetes modules.
+
+<Tabs>
+  <Tab title="macOS">
+    Download and install [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+    
+    Verify installation:
+    ```bash
+    docker --version
+    docker run hello-world
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    ```bash
+    # Ubuntu/Debian
+    sudo apt-get update
+    sudo apt-get install docker.io docker-compose
+    sudo usermod -aG docker $USER
+    
+    # Start Docker service
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    ```
+    
+    Log out and back in for group changes to take effect.
+  </Tab>
+  
+  <Tab title="Windows">
+    Download and install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+    
+    Requires WSL 2 backend. Follow the [WSL 2 setup guide](https://docs.docker.com/desktop/windows/wsl/).
+  </Tab>
+</Tabs>
+
+### Kubernetes Local Setup
+
+For running Kubernetes examples locally, install **kind** (Kubernetes in Docker):
+
+<CodeGroup>
+```bash macOS
+brew install kind
+brew install kubectl
+```
+
+```bash Linux
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+
+# Install kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+```
+
+```bash Windows
+# Using Chocolatey
+choco install kind
+choco install kubernetes-cli
+```
+</CodeGroup>
+
+Create a local cluster:
+
+```bash
+kind create cluster --name ml-in-production
+kubectl config get-contexts
+```
+
+<Tip>
+Install **k9s** for a better Kubernetes CLI experience:
+
+```bash
+brew install derailed/k9s/k9s  # macOS
+# or download from https://k9scli.io/
+```
+
+Run with: `k9s -A`
+</Tip>
+
+## Serverless Platforms (Optional)
+
+### Modal Setup
+
+Modal provides serverless GPU compute for training and inference.
+
+<Steps>
+  <Step title="Install Modal">
+    ```bash
+    pip install modal
+    # or with uv:
+    uv pip install modal
+    ```
+  </Step>
+  
+  <Step title="Authenticate">
+    ```bash
+    modal token new
+    ```
+    
+    This opens a browser window for authentication.
+  </Step>
+  
+  <Step title="Test your setup">
+    ```bash
+    cd module-1/modal-examples
+    modal run modal_hello_world.py
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Modal offers generous free tier credits for experimentation. Perfect for running GPU-intensive training jobs without local hardware.
+</Note>
+
+## GPU Setup (Optional)
+
+### CUDA for Local GPU Training
+
+If you have an NVIDIA GPU and want to train locally:
+
+<Steps>
+  <Step title="Check GPU availability">
+    ```bash
+    nvidia-smi
+    ```
+  </Step>
+  
+  <Step title="Install PyTorch with CUDA">
+    Visit [pytorch.org](https://pytorch.org/get-started/locally/) for the correct command, or use:
+    
+    ```bash
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    ```
+  </Step>
+  
+  <Step title="Verify GPU access">
+    ```python
+    import torch
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    print(f"GPU count: {torch.cuda.device_count()}")
+    print(f"GPU name: {torch.cuda.get_device_name(0)}")
+    ```
+  </Step>
+</Steps>
+
+## Editor Setup
+
+### VS Code (Recommended)
+
+Install these extensions for the best experience:
+
+- **Python** (ms-python.python) - IntelliSense, debugging, linting
+- **Ruff** (charliermarsh.ruff) - Fast linting and formatting
+- **Jupyter** (ms-toolsai.jupyter) - Notebook support
+- **Docker** (ms-azuretools.vscode-docker) - Container management
+- **YAML** (redhat.vscode-yaml) - Kubernetes YAML validation
+
+Recommended settings:
+
+```json settings.json
+{
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": true,
+      "source.organizeImports": true
+    }
+  },
+  "python.testing.pytestEnabled": true
+}
+```
+
+## Verify Your Setup
+
+Run this checklist to ensure everything is configured correctly:
+
+<Accordion title="Setup verification checklist" icon="check">
+  ```bash
+  # Python version
+  python3 --version  # Should be 3.10+
+  
+  # Virtual environment
+  which python  # Should point to venv/bin/python
+  
+  # Core packages
+  python -c "import transformers, datasets, torch; print('✓ Core packages installed')"
+  
+  # Docker
+  docker --version
+  docker run hello-world
+  
+  # Kubernetes
+  kubectl version --client
+  kind get clusters
+  
+  # Code quality
+  ruff --version
+  pytest --version
+  
+  # Optional: Modal
+  modal --version
+  
+  # Optional: GPU
+  python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
+  ```
+</Accordion>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="ImportError: No module named 'transformers'" icon="triangle-exclamation">
+    Make sure your virtual environment is activated:
+    
+    ```bash
+    which python  # Should show venv path
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+  </Accordion>
+  
+  <Accordion title="CUDA out of memory" icon="triangle-exclamation">
+    Reduce batch size or maximum sequence length in your training config:
+    
+    ```json conf/example.json
+    {
+      "per_device_train_batch_size": 8,  // Reduce from 16
+      "max_seq_length": 128  // Reduce from 512
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Docker permission denied" icon="triangle-exclamation">
+    Add your user to the docker group:
+    
+    ```bash
+    sudo usermod -aG docker $USER
+    newgrp docker  # Or log out and back in
+    ```
+  </Accordion>
+  
+  <Accordion title="Port 8080 already in use" icon="triangle-exclamation">
+    Find and kill the process using the port:
+    
+    ```bash
+    # macOS/Linux
+    lsof -ti:8080 | xargs kill -9
+    
+    # Windows
+    netstat -ano | findstr :8080
+    taskkill /PID <PID> /F
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="bolt" href="/quickstart">
+    Train and deploy your first model in 10 minutes
+  </Card>
+  
+  <Card title="Module 1: Infrastructure" icon="server" href="/modules/module-1/overview">
+    Start with containerization and Kubernetes basics
+  </Card>
+  
+  <Card title="Module 3: Training" icon="brain" href="/modules/module-3/overview">
+    Learn training workflows and experiment tracking
+  </Card>
+  
+  <Card title="Browse All Modules" icon="book" href="/modules/module-1/overview">
+    Explore all 8 course modules
+  </Card>
+</CardGroup>

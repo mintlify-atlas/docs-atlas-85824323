@@ -1,0 +1,594 @@
+---
+title: "Serverless Alternatives"
+description: "Deploy ML applications without managing infrastructure using Modal and Railway"
+---
+
+## Introduction
+
+Kubernetes is powerful but complex. For small teams, pet projects, or when you simply don't want to manage infrastructure, serverless platforms offer simpler alternatives.
+
+<Note>
+Serverless doesn't mean "no servers"—it means you don't manage them. The platform handles scaling, orchestration, and infrastructure automatically.
+</Note>
+
+## When to Choose Serverless
+
+### Good Use Cases
+
+- **Small teams**: No dedicated DevOps resources
+- **Rapid prototyping**: Get from idea to production in minutes
+- **Variable workload**: Scale to zero when idle, scale up on demand
+- **Focus on code**: Spend time on ML, not infrastructure
+
+### When to Use Kubernetes Instead
+
+- **Complex microservices**: Many interdependent services
+- **Strict cost control**: Reserved capacity is cheaper than pay-per-use
+- **Custom infrastructure**: Need specific networking, storage, or security setups
+- **Vendor lock-in concerns**: Kubernetes provides portability
+
+<Warning>
+Serverless platforms can become expensive at scale. Always monitor costs and compare with dedicated infrastructure as your usage grows.
+</Warning>
+
+## Modal: Serverless for AI/ML
+
+[Modal](https://modal.com/) is purpose-built for AI/ML workloads. It provides serverless GPU access, automatic scaling, and a Python-native API.
+
+### Why Modal?
+
+- **GPU support**: Access H100, A100, and other GPUs without provisioning
+- **Python-first**: Define infrastructure with Python decorators
+- **Fast iteration**: Hot reload code without rebuilding containers
+- **Automatic scaling**: Scale from 0 to 1000s of containers
+- **Built-in orchestration**: Distributed map, parallel jobs, scheduled functions
+
+### Installation
+
+```bash
+# Install Modal
+uv add modal
+
+# Or with pip
+pip install modal
+
+# Authenticate
+modal token new
+```
+
+This opens your browser to complete authentication.
+
+### Hello World Example
+
+<CodeGroup>
+
+```python modal_hello_world.py
+import sys
+import modal
+
+app = modal.App("ml-in-production-module-1")
+
+
+@app.function()
+def f(i):
+    if i % 2 == 0:
+        print("hello", i)
+    else:
+        print("world", i, file=sys.stderr)
+
+    return i * i
+
+
+@app.local_entrypoint()
+def main():
+    # run the function remotely on Modal
+    print(f.remote(1000))
+
+    # run the function in parallel and remotely on Modal
+    total = 0
+    for ret in f.map(range(20)):
+        total += ret
+
+    print(total)
+```
+
+</CodeGroup>
+
+**Run the example:**
+
+```bash
+uv run modal run -d ./modal-examples/modal_hello_world.py
+```
+
+### Key Features Demonstrated
+
+1. **Remote execution**: `f.remote(1000)` runs the function on Modal's infrastructure
+2. **Parallel processing**: `f.map(range(20))` distributes work across multiple containers
+3. **Local entrypoint**: `@app.local_entrypoint()` runs locally and orchestrates remote functions
+
+<Note>
+Modal handles containerization automatically. You don't write Dockerfiles—just specify dependencies in your Python code.
+</Note>
+
+### ML Training Example
+
+Modal excels at GPU-accelerated training. Here's a real-world example that fine-tunes a language model:
+
+<CodeGroup>
+
+```python modal_hello_world_training.py
+import modal
+
+app = modal.App("function-calling-finetune")
+image = (
+    modal.Image.debian_slim()
+    .pip_install(
+        [
+            "transformers==4.51.2",
+            "peft==0.15.1",
+            "bitsandbytes==0.45.4",
+            "trl==0.16.1",
+            "datasets==3.5.0",
+            "torch==2.2.1",
+            "accelerate==1.5.2",
+            "wandb==0.19.8",
+        ]
+    )
+    .env({"WANDB_PROJECT": "function-calling-finetune"})
+)
+
+with image.imports():
+    from enum import Enum
+    import torch
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+    from datasets import load_dataset
+    from trl import SFTConfig, SFTTrainer
+    from peft import LoraConfig, TaskType, PeftConfig, PeftModel
+
+
+DATASET_NAME = "Jofthomas/hermes-function-calling-thinking-V1"
+USERNAME = "truskovskiyk"
+MODEL_NAME = "google/gemma-3-4b-it"
+OUTPUT_DIR = "gemma-3-4b-it-function-calling"
+
+
+@app.function(
+    image=image,
+    cloud="aws",
+    gpu="H200",
+    timeout=86400,
+    secrets=[modal.Secret.from_name("training-config")],
+)
+def function_calling_finetune():
+    set_seed(42)
+
+    dataset_name = DATASET_NAME
+    username = USERNAME
+    model_name = MODEL_NAME
+    output_dir = OUTPUT_DIR
+
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    # ... (training code continues)
+```
+
+</CodeGroup>
+
+**Run training:**
+
+```bash
+uv run modal run -d ./modal-examples/modal_hello_world_training.py::function_calling_finetune
+```
+
+### Modal Features Breakdown
+
+<Steps>
+  <Step title="Container Image Definition">
+    ```python
+    image = (
+        modal.Image.debian_slim()
+        .pip_install(["transformers==4.51.2", "torch==2.2.1"])
+        .env({"WANDB_PROJECT": "my-project"})
+    )
+    ```
+    
+    Define dependencies programmatically—no Dockerfile needed.
+  </Step>
+  
+  <Step title="GPU Allocation">
+    ```python
+    @app.function(
+        image=image,
+        cloud="aws",
+        gpu="H200",
+        timeout=86400,
+    )
+    ```
+    
+    Request specific GPU types and cloud providers.
+  </Step>
+  
+  <Step title="Secret Management">
+    ```python
+    secrets=[modal.Secret.from_name("training-config")]
+    ```
+    
+    Securely inject API keys and credentials.
+  </Step>
+  
+  <Step title="Distributed Computing">
+    ```python
+    results = f.map(data_batches, order_outputs=False)
+    ```
+    
+    Automatically parallelize work across containers.
+  </Step>
+</Steps>
+
+### Modal Best Practices
+
+<Tabs>
+  <Tab title="Optimize Cold Starts">
+    ```python
+    # Use slim base images
+    image = modal.Image.debian_slim()
+    
+    # Cache expensive operations
+    @app.function(image=image)
+    @modal.web_endpoint()
+    def serve():
+        # This loads once per container lifetime
+        model = load_model()
+        
+        def handler(request):
+            return model.predict(request.data)
+        
+        return handler
+    ```
+  </Tab>
+  
+  <Tab title="Volume Storage">
+    ```python
+    # Persist data across runs
+    volume = modal.Volume.from_name("my-data")
+    
+    @app.function(volumes={"/data": volume})
+    def train():
+        # Read from /data
+        dataset = load_from_disk("/data/dataset")
+        
+        # Write results
+        model.save("/data/model")
+        volume.commit()  # Persist changes
+    ```
+  </Tab>
+  
+  <Tab title="Scheduled Jobs">
+    ```python
+    # Run daily training
+    @app.function(
+        schedule=modal.Period(days=1),
+        secrets=[modal.Secret.from_name("api-keys")]
+    )
+    def daily_retrain():
+        download_latest_data()
+        train_model()
+        deploy_model()
+    ```
+  </Tab>
+</Tabs>
+
+### Modal Pricing
+
+Modal charges for compute time only (no idle costs):
+
+- **CPU**: ~$0.0001/CPU-second
+- **GPU**: ~$1.10/hour for A10G, ~$4.50/hour for A100
+- **Storage**: Volumes are extra
+
+<Note>
+You only pay when functions are executing. Containers scale to zero automatically, making Modal cost-effective for intermittent workloads.
+</Note>
+
+## Railway: Simple App Deployment
+
+[Railway](https://railway.app/) provides simple deployment for web applications and APIs. It's ideal for model serving endpoints.
+
+### Why Railway?
+
+- **Zero config**: Deploy from GitHub with one click
+- **Databases included**: PostgreSQL, Redis, MongoDB built-in
+- **Automatic HTTPS**: SSL certificates and domains handled automatically
+- **Preview environments**: Every PR gets its own environment
+- **Simple pricing**: Pay for resources used, no hidden fees
+
+### Getting Started
+
+<Steps>
+  <Step title="Visit Railway">
+    ```bash
+    open https://railway.app/
+    ```
+    
+    Sign up with your GitHub account.
+  </Step>
+  
+  <Step title="Create Project">
+    Click "New Project" and select your repository.
+    
+    Railway detects your runtime (Python, Node, etc.) automatically.
+  </Step>
+  
+  <Step title="Configure Service">
+    Railway reads configuration from:
+    - `Dockerfile` (if present)
+    - `requirements.txt` for Python
+    - `package.json` for Node.js
+    
+    No configuration needed for standard projects.
+  </Step>
+  
+  <Step title="Deploy">
+    Push to your main branch—Railway deploys automatically.
+    
+    Get a public URL instantly: `https://your-app.up.railway.app`
+  </Step>
+</Steps>
+
+### Railway Use Cases
+
+<Tabs>
+  <Tab title="Model Serving API">
+    ```python
+    # app.py
+    from fastapi import FastAPI
+    import joblib
+    
+    app = FastAPI()
+    model = joblib.load("model.pkl")
+    
+    @app.post("/predict")
+    def predict(data: dict):
+        prediction = model.predict([data["features"]])
+        return {"prediction": prediction[0]}
+    ```
+    
+    Railway automatically:
+    - Detects FastAPI
+    - Installs dependencies
+    - Exposes port 8000
+    - Provides HTTPS URL
+  </Tab>
+  
+  <Tab title="Streamlit Dashboard">
+    ```python
+    # streamlit_app.py
+    import streamlit as st
+    import pandas as pd
+    
+    st.title("ML Model Dashboard")
+    
+    uploaded_file = st.file_uploader("Upload data")
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        predictions = model.predict(df)
+        st.write(predictions)
+    ```
+    
+    Railway detects Streamlit and configures automatically.
+  </Tab>
+  
+  <Tab title="Background Workers">
+    ```python
+    # worker.py
+    import schedule
+    import time
+    
+    def retrain_model():
+        print("Retraining model...")
+        # Training logic here
+    
+    schedule.every().day.at("02:00").do(retrain_model)
+    
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+    ```
+    
+    Deploy background tasks alongside your API.
+  </Tab>
+</Tabs>
+
+### Railway Environment Variables
+
+Configure secrets in Railway's dashboard:
+
+```bash
+# Set via Railway UI
+DATABASE_URL=postgresql://...
+WANDB_API_KEY=...
+MODEL_PATH=/app/models/model.pkl
+```
+
+Access in code:
+
+```python
+import os
+
+db_url = os.environ["DATABASE_URL"]
+api_key = os.environ.get("WANDB_API_KEY")
+```
+
+### Railway Pricing
+
+Railway uses credit-based pricing:
+
+- **Starter**: $5/month (free trial available)
+- **Developer**: $20/month for more resources
+- **Pay-as-you-go**: ~$0.000463/GB-hour for memory
+
+<Warning>
+Railway is convenient but can be more expensive than self-hosted options at scale. Monitor usage and set spending limits.
+</Warning>
+
+## Comparison: Modal vs Railway
+
+| Feature | Modal | Railway |
+|---------|-------|---------|
+| **Best For** | GPU training, batch jobs | Web APIs, databases |
+| **GPU Support** | ✅ H100, A100, A10G | ❌ No GPU |
+| **Scaling** | Automatic, 0 to 1000s | Automatic, but limited |
+| **Pricing** | Per-second GPU/CPU | Per-resource usage |
+| **Setup Complexity** | Python decorators | Git push |
+| **Use Case** | Heavy ML workloads | Simple deployments |
+
+## Other Serverless Options
+
+### Google Cloud Run
+
+Containerized applications on serverless infrastructure:
+
+```bash
+# Deploy with one command
+gcloud run deploy model-server \
+  --image gcr.io/project/model-server \
+  --platform managed \
+  --allow-unauthenticated
+```
+
+- **Pros**: Fast scaling, free tier, GCP integration
+- **Cons**: 15-minute timeout, no GPUs
+
+### AWS Lambda
+
+Function-as-a-Service with ML support:
+
+```python
+# lambda_function.py
+import json
+
+def lambda_handler(event, context):
+    # Your ML inference code
+    prediction = model.predict(event['data'])
+    return {
+        'statusCode': 200,
+        'body': json.dumps({'prediction': prediction})
+    }
+```
+
+- **Pros**: Massive scale, pay-per-invocation
+- **Cons**: Cold starts, complex ML dependencies
+
+### Hugging Face Spaces
+
+Host ML demos and models for free:
+
+```python
+# app.py
+import gradio as gr
+
+def predict(text):
+    return model.generate(text)
+
+gr.Interface(fn=predict, inputs="text", outputs="text").launch()
+```
+
+Upload to Hugging Face Spaces for instant public hosting.
+
+## Migration Path
+
+### Starting Point
+
+<Steps>
+  <Step title="Prototype">
+    Start with Railway or Modal for rapid development.
+  </Step>
+  
+  <Step title="Validate">
+    Prove your ML system works and provides value.
+  </Step>
+  
+  <Step title="Scale">
+    Monitor costs and performance metrics.
+  </Step>
+  
+  <Step title="Migrate">
+    Move to Kubernetes when:
+    - Serverless costs exceed dedicated infrastructure
+    - You need custom networking/security
+    - Team has DevOps capacity
+  </Step>
+</Steps>
+
+### Keeping Options Open
+
+Design portable applications:
+
+```python
+# config.py
+import os
+
+def load_model():
+    """Load model from environment-specific location"""
+    if os.environ.get("MODAL_RUNTIME"):
+        return load_from_volume("/cache/model.pkl")
+    elif os.environ.get("RAILWAY_ENVIRONMENT"):
+        return load_from_s3("s3://models/model.pkl")
+    else:
+        return load_from_disk("./model.pkl")
+```
+
+This allows switching platforms without code changes.
+
+## Best Practices
+
+<Warning>
+Always set budget alerts on serverless platforms. GPU costs can accumulate quickly if workloads run longer than expected.
+</Warning>
+
+### Cost Control
+
+1. **Set limits**: Configure max concurrency and timeout limits
+2. **Monitor usage**: Track GPU hours and function invocations
+3. **Optimize cold starts**: Cache models and dependencies
+4. **Use preemptible instances**: Save costs on interruptible workloads
+
+### Development Workflow
+
+```bash
+# Develop locally
+python train.py
+
+# Test on serverless
+modal run train.py
+
+# Deploy to production
+modal deploy train.py
+```
+
+Keep local development fast, use serverless for expensive operations.
+
+## Resources
+
+### Modal
+
+- [Modal Documentation](https://modal.com/docs)
+- [Modal Examples](https://github.com/modal-labs/modal-examples)
+- [Modal Pricing](https://modal.com/pricing)
+
+### Railway
+
+- [Railway Documentation](https://docs.railway.app/)
+- [Railway Templates](https://railway.app/templates)
+- [Railway Pricing](https://railway.app/pricing)
+
+### General
+
+- [Why data scientists shouldn't need to know Kubernetes](https://huyenchip.com/2021/09/13/data-science-infrastructure.html)
+- [Serverless ML Inference](https://www.anyscale.com/blog/serverless-ml-inference)
+
+## Next Steps
+
+Ready to practice everything you've learned? Head to the [Practice Exercise](/modules/module-1/practice) to apply containerization, Kubernetes, CI/CD, and serverless concepts in a hands-on project.

@@ -1,80 +1,230 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get started with ML in Production Practice in under 10 minutes"
 ---
 
-## Get started in three steps
+Get your first ML model trained and deployed quickly with this hands-on quickstart guide.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- Python 3.10 or higher installed
+- Git installed on your system
+- Basic familiarity with command line operations
+- (Optional) Docker Desktop for containerization examples
 
-### Step 2: Deploy your changes
+## Step 1: Clone the Repository
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+Clone the ML in Production Practice repository to your local machine:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+<CodeGroup>
+```bash Terminal
+git clone https://github.com/kyryl-opens-ml/ml-in-production-practice.git
+cd ml-in-production-practice
+```
+</CodeGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The repository contains 8 self-contained modules. Each module has its own dependencies and can be explored independently.
 </Note>
+
+## Step 2: Set Up Your First Example
+
+Let's start with Module 3's classic NLP example - a sentiment classification model using BERT.
+
+<Steps>
+  <Step title="Navigate to the classic example">
+    ```bash
+    cd module-3/classic-example
+    ```
+  </Step>
+  
+  <Step title="Create a virtual environment">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+    This installs the necessary packages including transformers, datasets, accelerate, and wandb for experiment tracking.
+  </Step>
+</Steps>
+
+## Step 3: Download and Prepare Data
+
+Load the SST-2 dataset (Stanford Sentiment Treebank) for sentiment analysis:
+
+```bash
+python -m classic_example.cli load-sst2-data --path-to-save ./data
+```
+
+This downloads and prepares the training and validation datasets in CSV format.
+
+<Tip>
+The SST-2 dataset contains movie reviews labeled as positive or negative, making it perfect for learning text classification.
+</Tip>
+
+## Step 4: Train Your First Model
+
+Train a BERT-based sentiment classifier with the pre-configured settings:
+
+```bash
+python -m classic_example.cli train --config-path ./conf/example.json
+```
+
+The training script will:
+- Load the pre-trained BERT model from Hugging Face
+- Fine-tune it on the SST-2 dataset
+- Save the trained model to the `results/` directory
+- Generate training metrics and evaluation results
+
+<Warning>
+Training requires a GPU for reasonable performance. On a CPU, consider reducing the number of training samples in the config file.
+</Warning>
+
+## Step 5: Run Inference
+
+Test your trained model on new data:
+
+```bash
+python -m classic_example.cli run-inference-on-dataframe \
+  --df-path ./data/test.csv \
+  --model-load-path ./results \
+  --result-path ./predictions.csv
+```
+
+Your predictions will be saved to `predictions.csv` with probability scores for each class.
+
+## Step 6: Serve Your Model
+
+Deploy your model as a REST API using FastAPI:
+
+<Steps>
+  <Step title="Navigate to the serving module">
+    ```bash
+    cd ../../module-5/serving
+    ```
+  </Step>
+  
+  <Step title="Install serving dependencies">
+    ```bash
+    pip install -r ../requirements.txt
+    ```
+  </Step>
+  
+  <Step title="Start the FastAPI server">
+    ```bash
+    uvicorn fast_api:app --host 0.0.0.0 --port 8080
+    ```
+    
+    Your API will be available at `http://localhost:8080`
+  </Step>
+  
+  <Step title="Test the API endpoint">
+    ```bash
+    curl -X POST "http://localhost:8080/predict" \
+      -H "Content-Type: application/json" \
+      -d '{"text": ["This movie is amazing!", "I did not enjoy this film."]}'
+    ```
+    
+    Expected response:
+    ```json
+    {
+      "probs": [
+        [0.05, 0.95],
+        [0.85, 0.15]
+      ]
+    }
+    ```
+  </Step>
+</Steps>
+
+## What's Next?
+
+You've successfully trained and deployed your first ML model! Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card title="Environment Setup" icon="wrench" href="/setup">
+    Configure virtual environments, dependencies, and development tools
+  </Card>
+  
+  <Card title="Module 1: Infrastructure" icon="server" href="/modules/module-1/overview">
+    Learn Docker, Kubernetes, and CI/CD for ML systems
+  </Card>
+  
+  <Card title="Module 4: Orchestration" icon="diagram-project" href="/modules/module-4/overview">
+    Build ML pipelines with Airflow, Kubeflow, and Dagster
+  </Card>
+  
+  <Card title="Module 7: Monitoring" icon="chart-line" href="/modules/module-7/overview">
+    Set up observability and data drift monitoring
+  </Card>
+</CardGroup>
+
+## Quick Tips
+
+<AccordionGroup>
+  <Accordion title="Using Weights & Biases for experiment tracking" icon="chart-mixed">
+    The examples integrate with W&B for logging metrics and artifacts:
+    
+    ```bash
+    export WANDB_PROJECT=ml-in-production-practice
+    export WANDB_API_KEY=your_api_key_here
+    ```
+    
+    Sign up for free at [wandb.ai](https://wandb.ai) to track your experiments.
+  </Accordion>
+  
+  <Accordion title="Running on Modal serverless platform" icon="cloud">
+    Deploy training jobs to Modal for GPU access:
+    
+    ```bash
+    pip install modal
+    modal token new
+    modal run run_training_job.py
+    ```
+    
+    This runs your training job on cloud GPUs without managing infrastructure.
+  </Accordion>
+  
+  <Accordion title="Code quality and formatting" icon="code">
+    Format and check code style across the repository:
+    
+    ```bash
+    ruff format .
+    ruff check .
+    ```
+    
+    Run tests with pytest:
+    
+    ```bash
+    pytest tests/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/5NF2NAsGEM">
+    Ask questions and connect with other learners
+  </Card>
+  
+  <Card title="Report an Issue" icon="github" href="https://github.com/kyryl-opens-ml/ml-in-production-practice/issues">
+    Found a bug or have a suggestion?
+  </Card>
+  
+  <Card title="Course Page" icon="graduation-cap" href="https://edu.kyrylai.com/courses/ml-in-production">
+    Access the full course curriculum
+  </Card>
+  
+  <Card title="DeepWiki" icon="book-open" href="https://deepwiki.com/kyryl-opens-ml/ml-in-production-practice">
+    Community-maintained summaries of each module
+  </Card>
+</CardGroup>

@@ -1,0 +1,569 @@
+---
+title: "Practice Exercises"
+description: "Hands-on homework assignments for Module 3: Training Workflows"
+---
+
+# Practice Exercises
+
+Complete hands-on exercises to implement training workflows, experiment tracking, and model testing for your ML project.
+
+## Prerequisites
+
+Before starting:
+- Have a training pipeline (from test task or your own project)
+- Set up a GitHub repository
+- Create a W&B account
+- Review the classic and generative examples
+
+<Info>
+You can use the [HuggingFace text classification example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) as a starting point.
+</Info>
+
+## Homework 5: Training & Experiments
+
+### Learning Objectives
+
+<CardGroup cols={2}>
+  <Card title="Experiment Tracking" icon="chart-line">
+    Set up W&B logging and track training experiments
+  </Card>
+  <Card title="Hyperparameter Search" icon="sliders">
+    Run systematic hyperparameter optimization
+  </Card>
+  <Card title="Model Documentation" icon="file-lines">
+    Create comprehensive model cards
+  </Card>
+  <Card title="Distributed Training" icon="network-wired">
+    Scale training to multiple GPUs
+  </Card>
+</CardGroup>
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Core Reading">
+    - [The Data Science Lifecycle Process](https://github.com/dslp/dslp#the-data-science-lifecycle-process)
+    - [Structuring Your Project](https://docs.python-guide.org/writing/structure/)
+    - [How to Organize Deep Learning Projects](https://neptune.ai/blog/how-to-organize-deep-learning-projects-best-practices)
+    - [Weights & Biases Documentation](https://docs.wandb.ai/)
+    - [The value of a shared understanding of AI models](https://modelcards.withgoogle.com/about)
+  </Accordion>
+  
+  <Accordion title="Advanced Topics">
+    - [MosaicBERT: Pretraining BERT from Scratch for $20](https://www.mosaicml.com/blog/mosaicbert)
+    - [15 Best Tools for ML Experiment Tracking](https://neptune.ai/blog/best-ml-experiment-tracking-tools)
+    - [Some Techniques To Make Your PyTorch Models Train (Much) Faster](https://sebastianraschka.com/blog/2023/pytorch-faster.html)
+    - [PyTorch Distributed Overview](https://pytorch.org/tutorials/beginner/dist_overview.html)
+  </Accordion>
+  
+  <Accordion title="Distributed Training">
+    - [Distributed Training Guide](https://www.run.ai/guides/gpu-deep-learning/distributed-training)
+    - [Training 175B Parameter Models at 1000 GPU scale](https://www.anyscale.com/blog/training-175b-parameter-language-models-at-1000-gpu-scale-with-alpa-and-ray)
+    - [HuggingFace Accelerate](https://github.com/huggingface/accelerate)
+    - [Ray Train: Scalable Model Training](https://docs.ray.io/en/latest/train/train.html)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="Update Design Document">
+    Add experiment management section to your Google Doc:
+    - Chosen experiment tracking tool (W&B, Neptune, MLflow)
+    - Model card template and structure
+    - Hyperparameter search strategy
+    - Model versioning approach
+  </Step>
+  
+  <Step title="PR1: W&B Experiment Logging">
+    Implement experiment tracking with Weights & Biases:
+    
+    ```python
+    from transformers import TrainingArguments, Trainer
+    
+    training_args = TrainingArguments(
+        output_dir="results",
+        report_to=["wandb"],
+        run_name="bert-experiment-1",
+        logging_steps=100,
+        eval_steps=100,
+    )
+    
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        compute_metrics=compute_metrics,
+    )
+    
+    trainer.train()
+    ```
+    
+    **Requirements:**
+    - Log training/validation metrics
+    - Track hyperparameters
+    - Save model checkpoints
+    - Create W&B project link
+  </Step>
+  
+  <Step title="PR2: Hyperparameter Search">
+    Implement hyperparameter search with W&B sweeps:
+    
+    ```yaml sweep.yaml
+    program: train.py
+    method: bayes
+    metric:
+      name: eval_f1
+      goal: maximize
+    parameters:
+      learning_rate:
+        min: 0.00001
+        max: 0.0001
+      per_device_train_batch_size:
+        values: [16, 32, 64]
+      num_train_epochs:
+        values: [3, 5, 7]
+    ```
+    
+    ```bash
+    wandb sweep sweep.yaml
+    wandb agent your-entity/project/sweep-id
+    ```
+    
+    **Requirements:**
+    - Define search space
+    - Run at least 10 experiments
+    - Document best hyperparameters
+    - Compare results in W&B
+  </Step>
+  
+  <Step title="PR3: Model Card">
+    Create comprehensive model card:
+    
+    ```python
+    # Automatic generation
+    trainer.create_model_card(
+        finetuned_from=model_args.model_name_or_path,
+        tasks="text-classification",
+        language="en",
+        dataset_tags="sst2",
+    )
+    ```
+    
+    Or use the [Model Card Toolkit](https://github.com/tensorflow/model-card-toolkit).
+    
+    **Requirements:**
+    - Model details (architecture, training data)
+    - Intended use cases
+    - Performance metrics
+    - Limitations and biases
+    - Training procedure
+    - Evaluation results
+  </Step>
+  
+  <Step title="PR4 (Optional): MosaicBERT Tutorial">
+    Replicate the [MosaicBERT tutorial](https://www.mosaicml.com/blog/mosaicbert) to train BERT from scratch efficiently.
+    
+    **Focus areas:**
+    - Efficient training techniques
+    - Cost optimization
+    - Performance benchmarking
+  </Step>
+  
+  <Step title="PR5 (Optional): NNI Hyperparameter Search">
+    Implement hyperparameter search using [Microsoft NNI](https://github.com/microsoft/nni):
+    
+    ```python
+    import nni
+    
+    def main():
+        # Get parameters from NNI
+        params = nni.get_next_parameter()
+        
+        # Train with params
+        model = train_model(
+            learning_rate=params['learning_rate'],
+            batch_size=params['batch_size'],
+        )
+        
+        # Report result
+        nni.report_final_result(accuracy)
+    
+    if __name__ == '__main__':
+        main()
+    ```
+    
+    **Compare with W&B sweeps:**
+    - Search efficiency
+    - Ease of use
+    - Visualization capabilities
+  </Step>
+  
+  <Step title="PR6 (Optional): Distributed Training">
+    Implement multi-GPU training:
+    
+    **Option A - PyTorch DDP:**
+    ```bash
+    torchrun --nproc_per_node=4 train.py
+    ```
+    
+    **Option B - Accelerate:**
+    ```bash
+    accelerate config
+    accelerate launch train.py
+    ```
+    
+    **Option C - Ray:**
+    ```python
+    from ray.train.torch import TorchTrainer
+    
+    trainer = TorchTrainer(
+        train_func=train_function,
+        scaling_config={"num_workers": 4},
+    )
+    trainer.fit()
+    ```
+  </Step>
+</Steps>
+
+### Deliverables
+
+<Tabs>
+  <Tab title="Required">
+    - [ ] Google Doc updated with experiment section
+    - [ ] PR1: W&B experiment logging
+    - [ ] PR2: Hyperparameter search
+    - [ ] PR3: Model card
+    - [ ] Public W&B project link
+    - [ ] All PRs merged to main branch
+  </Tab>
+  
+  <Tab title="Optional">
+    - [ ] PR4: MosaicBERT tutorial
+    - [ ] PR5: NNI hyperparameter search
+    - [ ] PR6: Distributed training
+  </Tab>
+</Tabs>
+
+### Success Criteria
+
+- ✅ All required PRs merged
+- ✅ W&B project shows multiple experiments
+- ✅ Model card includes all required sections
+- ✅ Hyperparameter search identifies best config
+- ✅ Design document describes experiment strategy
+
+## Homework 6: Testing & CI
+
+### Learning Objectives
+
+<CardGroup cols={2}>
+  <Card title="Code Testing" icon="flask">
+    Write unit tests for training code
+  </Card>
+  <Card title="Data Validation" icon="check">
+    Test data quality and schema
+  </Card>
+  <Card title="Model Testing" icon="brain">
+    Validate model behavior and performance
+  </Card>
+  <Card title="CI/CD Integration" icon="gears">
+    Automate testing in GitHub Actions
+  </Card>
+</CardGroup>
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Testing Fundamentals">
+    - [Test Pyramid](https://martinfowler.com/bliki/TestPyramid.html)
+    - [PyTesting the Limits of Machine Learning](https://www.youtube.com/watch?v=GycRK_K0x2s)
+    - [Testing Machine Learning Systems](https://madewithml.com/courses/mlops/testing/)
+  </Accordion>
+  
+  <Accordion title="ML-Specific Testing">
+    - [Beyond Accuracy: Behavioral Testing with CheckList](https://github.com/marcotcr/checklist)
+    - [Robustness Gym](https://github.com/robustness-gym/robustness-gym)
+    - [ML Testing with Deepchecks](https://github.com/deepchecks/deepchecks)
+  </Accordion>
+  
+  <Accordion title="LLM Testing">
+    - [Promptfoo: test your LLM app](https://github.com/promptfoo/promptfoo)
+    - [DeepEval: Evaluation Framework for LLMs](https://github.com/confident-ai/deepeval)
+  </Accordion>
+  
+  <Accordion title="CI/CD">
+    - [Using GitHub Actions for MLOps](https://github.blog/2020-06-17-using-github-actions-for-mlops-data-science/)
+    - [Continuous Machine Learning (CML)](https://github.com/iterative/cml)
+    - [Model Registry](https://docs.wandb.ai/guides/model_registry)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="Update Testing Plan">
+    Add testing strategy to your Google Doc:
+    - Test coverage goals
+    - Data validation approach
+    - Model behavioral tests
+    - CI/CD pipeline design
+  </Step>
+  
+  <Step title="PR1: Code Tests">
+    Write unit tests for training code:
+    
+    ```python test_code.py
+    import pytest
+    from your_package.utils import compute_metrics
+    
+    def test_compute_metrics():
+        """Test metrics calculation."""
+        eval_pred = EvalPrediction(
+            predictions=np.array([[0.1, 0.9], [0.8, 0.2]]),
+            label_ids=np.array([1, 0])
+        )
+        
+        metrics = compute_metrics(eval_pred)
+        
+        assert "f1" in metrics
+        assert 0 <= metrics["f1"] <= 1
+    ```
+    
+    **Test coverage:**
+    - Utility functions
+    - Data preprocessing
+    - Metric computation
+    - Configuration loading
+  </Step>
+  
+  <Step title="PR2: Data Tests">
+    Implement data validation tests:
+    
+    ```python test_data.py
+    from great_expectations.dataset import PandasDataset
+    
+    def test_data_shape(df: PandasDataset):
+        """Test dataset dimensions."""
+        assert df.shape[0] > 1000
+        assert df.shape[1] == 3
+    
+    def test_data_schema(df: PandasDataset):
+        """Test column schema."""
+        assert df.expect_table_columns_to_match_ordered_list(
+            column_list=["text", "label", "id"]
+        )["success"]
+    
+    def test_data_quality(df: PandasDataset):
+        """Test data quality."""
+        assert df.expect_column_values_to_not_be_null(
+            column="text"
+        )["success"]
+        
+        assert df.expect_column_values_to_be_in_set(
+            column="label",
+            value_set=[0, 1]
+        )["success"]
+    ```
+    
+    Use [Great Expectations](https://greatexpectations.io/) or [Deepchecks](https://github.com/deepchecks/deepchecks).
+  </Step>
+  
+  <Step title="PR3: Model Tests">
+    Write model behavioral tests:
+    
+    ```python test_model.py
+    def test_overfit_batch(trainer):
+        """Test model can overfit small batch."""
+        train_result = trainer.train()
+        assert train_result.metrics["train_loss"] < 0.01
+    
+    def test_invariance():
+        """Test predictions are invariant to irrelevant changes."""
+        text1 = "I am flying to NYC"
+        text2 = "I am flying to Toronto"
+        
+        pred1 = model.predict(text1)
+        pred2 = model.predict(text2)
+        
+        # Sentiment should be similar
+        assert abs(pred1 - pred2) < 0.1
+    
+    def test_directional():
+        """Test predictions change in expected direction."""
+        positive = "This movie is excellent!"
+        negative = "This movie is terrible!"
+        
+        pred_pos = model.predict(positive)
+        pred_neg = model.predict(negative)
+        
+        assert pred_pos > pred_neg
+    ```
+    
+    Reference: [Made With ML Testing Guide](https://madewithml.com/courses/mlops/testing/)
+  </Step>
+  
+  <Step title="PR4: Model Registry">
+    Implement model versioning with W&B:
+    
+    ```python
+    import wandb
+    
+    def upload_to_registry(model_name: str, model_path: Path):
+        """Upload model to W&B registry."""
+        with wandb.init() as _:
+            art = wandb.Artifact(model_name, type="model")
+            art.add_file(model_path / "config.json")
+            art.add_file(model_path / "model.safetensors")
+            art.add_file(model_path / "tokenizer.json")
+            art.add_file(model_path / "README.md")
+            wandb.log_artifact(art)
+    
+    def load_from_registry(model_name: str):
+        """Download model from registry."""
+        with wandb.init() as run:
+            artifact = run.use_artifact(model_name, type="model")
+            artifact_dir = artifact.download()
+            return artifact_dir
+    ```
+  </Step>
+  
+  <Step title="PR5 (Optional): Model Interpretability">
+    Use [LIT (Learning Interpretability Tool)](https://github.com/PAIR-code/lit) or similar:
+    
+    ```python
+    from lit_nlp import notebook
+    from lit_nlp.examples.datasets import glue
+    from lit_nlp.examples.models import glue_models
+    
+    # Load dataset and model
+    datasets = {'sst2_dev': glue.SST2Data('validation')}
+    models = {'sst2': glue_models.SST2Model('path/to/model')}
+    
+    # Start LIT
+    widget = notebook.LitWidget(models, datasets, height=800)
+    widget.render()
+    ```
+    
+    For other domains (CV, audio, tabular), find equivalent tools.
+  </Step>
+  
+  <Step title="PR6 (Optional): LLM API Testing">
+    Test LLM API with DeepEval or Promptfoo:
+    
+    ```python
+    from deepeval import assert_test
+    from deepeval.metrics import HallucinationMetric
+    from deepeval.test_case import LLMTestCase
+    
+    def test_llm_hallucination():
+        """Test for hallucinations."""
+        test_case = LLMTestCase(
+            input="What is the capital of France?",
+            actual_output="Paris is the capital of France.",
+            context=["Paris is the capital of France."]
+        )
+        
+        metric = HallucinationMetric(threshold=0.5)
+        assert_test(test_case, [metric])
+    ```
+  </Step>
+</Steps>
+
+### CI/CD Pipeline
+
+Set up GitHub Actions workflow:
+
+```yaml .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run code tests
+      run: pytest tests/test_code.py
+    
+    - name: Run data tests
+      run: pytest tests/test_data.py
+    
+    - name: Run model tests
+      run: pytest tests/test_model.py
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v2
+```
+
+### Deliverables
+
+<Tabs>
+  <Tab title="Required">
+    - [ ] Google Doc updated with testing plan
+    - [ ] PR1: Code tests with CI integration
+    - [ ] PR2: Data validation tests
+    - [ ] PR3: Model behavioral tests
+    - [ ] PR4: Model registry integration
+    - [ ] All tests pass in CI
+  </Tab>
+  
+  <Tab title="Optional">
+    - [ ] PR5: Model interpretability tool
+    - [ ] PR6: LLM API tests
+  </Tab>
+</Tabs>
+
+### Success Criteria
+
+- ✅ All required PRs merged
+- ✅ Tests run automatically in CI
+- ✅ Code coverage > 80%
+- ✅ Data validation catches quality issues
+- ✅ Model tests verify expected behavior
+- ✅ Models versioned in registry
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Classic Example" icon="code" href="https://github.com/kyryl-opens-ml/ml-in-production-practice/tree/main/module-3/classic-example">
+    Reference implementation for BERT training
+  </Card>
+  <Card title="Generative Example" icon="wand-magic-sparkles" href="https://github.com/kyryl-opens-ml/ml-in-production-practice/tree/main/module-3/generative-example">
+    Reference implementation for Phi-3 training
+  </Card>
+  <Card title="Made With ML" icon="graduation-cap" href="https://madewithml.com/courses/mlops/testing/">
+    Comprehensive testing guide
+  </Card>
+  <Card title="W&B Documentation" icon="book" href="https://docs.wandb.ai/">
+    Complete Weights & Biases guide
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you get stuck:
+
+1. Review the reference implementations in `module-3/`
+2. Check the reading list for relevant articles
+3. Search W&B documentation
+4. Ask questions in course discussion forum
+5. Compare with HuggingFace examples
+
+<Note>
+Remember: The goal is to build production-ready training workflows, not just achieve high accuracy. Focus on reproducibility, testing, and documentation.
+</Note>

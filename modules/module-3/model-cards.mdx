@@ -1,0 +1,383 @@
+---
+title: "Model Cards"
+description: "Document ML models with standardized model cards for transparency and accountability"
+---
+
+# Model Cards
+
+Model cards provide standardized documentation for machine learning models, improving transparency, accountability, and reproducibility. They describe model performance, limitations, intended use cases, and ethical considerations.
+
+## What Are Model Cards?
+
+Model cards are short documents that accompany trained ML models, providing essential information about:
+
+<CardGroup cols={2}>
+  <Card title="Model Details" icon="circle-info">
+    Architecture, training data, and hyperparameters
+  </Card>
+  <Card title="Intended Use" icon="bullseye">
+    Primary use cases and out-of-scope applications
+  </Card>
+  <Card title="Performance" icon="chart-line">
+    Metrics across different datasets and demographics
+  </Card>
+  <Card title="Limitations" icon="triangle-exclamation">
+    Known issues, biases, and failure modes
+  </Card>
+</CardGroup>
+
+## Why Use Model Cards?
+
+<AccordionGroup>
+  <Accordion title="Transparency">
+    Provide stakeholders with clear information about model capabilities and limitations. Essential for building trust in ML systems.
+  </Accordion>
+  
+  <Accordion title="Accountability">
+    Document training decisions, data sources, and evaluation methods. Enables audit trails for regulated industries.
+  </Accordion>
+  
+  <Accordion title="Reproducibility">
+    Record exact configurations, data versions, and training procedures. Allows others to reproduce or build upon your work.
+  </Accordion>
+  
+  <Accordion title="Risk Management">
+    Identify potential harms, biases, and edge cases. Helps teams make informed decisions about model deployment.
+  </Accordion>
+</AccordionGroup>
+
+## Automatic Generation
+
+HuggingFace Trainer automatically generates model cards:
+
+```python
+from transformers import Trainer, TrainingArguments
+
+# Configure training
+training_args = TrainingArguments(
+    output_dir="results",
+    num_train_epochs=5,
+    # ... other args
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+)
+
+# Train model
+trainer.train()
+
+# Generate model card
+kwargs = {
+    "finetuned_from": "google/mobilebert-uncased",
+    "tasks": "text-classification",
+    "language": "en",
+    "dataset_tags": "sst2",
+    "dataset": "SST-2 (Stanford Sentiment Treebank)",
+}
+
+trainer.create_model_card(**kwargs)
+# Saves to: results/README.md
+```
+
+This generates a structured README with:
+- Model description and architecture
+- Training procedure and hyperparameters
+- Evaluation results
+- Framework versions
+- Carbon emissions estimate
+
+## Model Card Structure
+
+A comprehensive model card includes:
+
+### 1. Model Details
+
+```markdown
+## Model Details
+
+- **Model type:** BERT-based sequence classification
+- **Base model:** google/mobilebert-uncased
+- **Training data:** SST-2 (Stanford Sentiment Treebank)
+- **Language:** English
+- **License:** Apache 2.0
+- **Developed by:** Your Team/Organization
+- **Date:** 2024-03-09
+```
+
+### 2. Intended Use
+
+```markdown
+## Intended Use
+
+### Primary Use Cases
+- Binary sentiment classification of English text
+- Movie review analysis
+- Social media sentiment monitoring
+
+### Out-of-Scope Use Cases
+- Multi-label classification
+- Non-English text
+- Clinical or medical decision making
+- High-stakes decisions without human oversight
+```
+
+### 3. Training Details
+
+```markdown
+## Training Details
+
+### Training Data
+- Dataset: SST-2 from GLUE benchmark
+- Size: 67,349 training examples
+- Split: 80/20 train/validation
+- Preprocessing: Standard BERT tokenization
+
+### Hyperparameters
+- Learning rate: 5e-5
+- Batch size: 32
+- Epochs: 5
+- Optimizer: AdamW
+- Max sequence length: 128
+```
+
+### 4. Evaluation Results
+
+```markdown
+## Evaluation Results
+
+| Metric | Value |
+|--------|-------|
+| F1 Score | 0.912 |
+| Accuracy | 0.908 |
+| Precision | 0.915 |
+| Recall | 0.909 |
+
+### Performance by Category
+- Positive sentiment: F1 = 0.925
+- Negative sentiment: F1 = 0.899
+```
+
+### 5. Limitations and Biases
+
+```markdown
+## Limitations
+
+- Trained only on movie reviews; may not generalize to other domains
+- Limited to binary sentiment; cannot detect neutral or mixed sentiment
+- Performance degrades on short text (<10 words)
+- May exhibit bias toward formal language over slang
+
+## Ethical Considerations
+
+- Training data may contain societal biases
+- Should not be used for decisions affecting individuals
+- Requires human review for production use
+```
+
+### 6. Additional Information
+
+```markdown
+## Additional Information
+
+- Repository: https://github.com/your-org/project
+- Paper: [Link to paper if applicable]
+- Contact: your-team@example.com
+- W&B Report: https://wandb.ai/project/runs/abc123
+```
+
+## Model Card Toolkit
+
+For advanced use cases, use the [Model Card Toolkit](https://github.com/tensorflow/model-card-toolkit):
+
+```python
+from model_card_toolkit import ModelCardToolkit
+
+# Initialize toolkit
+mct = ModelCardToolkit(output_dir='model_card')
+
+# Create model card
+model_card = mct.scaffold_assets()
+
+# Populate fields
+model_card.model_details.name = 'BERT Sentiment Classifier'
+model_card.model_details.overview = 'Fine-tuned MobileBERT for sentiment analysis'
+model_card.model_details.version.name = 'v1.0'
+
+# Add training details
+model_card.considerations.use_cases = [
+    'Movie review sentiment analysis',
+    'Social media monitoring',
+]
+
+model_card.considerations.limitations = [
+    'Limited to English text',
+    'Binary classification only',
+]
+
+# Add evaluation data
+model_card.quantitative_analysis.performance_metrics = [
+    {'type': 'f1', 'value': 0.912},
+    {'type': 'accuracy', 'value': 0.908},
+]
+
+# Generate HTML and Markdown
+mct.update_model_card(model_card)
+mct.export_format()
+```
+
+## Real-World Examples
+
+<Tabs>
+  <Tab title="GPT-4">
+    OpenAI's GPT-4 includes comprehensive documentation:
+    
+    - [GPT-4o Model Card](https://openai.com/index/hello-gpt-4o/)
+    - [GPT-4 System Card](https://cdn.openai.com/papers/gpt-4-system-card.pdf)
+    
+    Includes:
+    - Detailed capability analysis
+    - Safety evaluations and mitigations
+    - Limitation documentation
+    - Deployment considerations
+  </Tab>
+  
+  <Tab title="HuggingFace Models">
+    Browse model cards on HuggingFace Hub:
+    
+    - [Popular Models](https://huggingface.co/models?sort=downloads)
+    - [BERT Base](https://huggingface.co/bert-base-uncased)
+    - [Phi-3](https://huggingface.co/microsoft/Phi-3-mini-128k-instruct)
+    
+    Each includes:
+    - Model description
+    - Training details
+    - Evaluation metrics
+    - Code examples
+  </Tab>
+  
+  <Tab title="Google Model Cards">
+    Google's model card examples and best practices:
+    
+    - [Model Cards Playbook](https://modelcards.withgoogle.com/about)
+    - [Example Cards](https://github.com/ivylee/model-cards-and-datasheets)
+    
+    Emphasizes:
+    - Fairness considerations
+    - Demographic performance
+    - Responsible AI practices
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Be Comprehensive">
+    Include all relevant information:
+    - Complete training configuration
+    - All evaluation metrics
+    - Known limitations and biases
+    - Intended and out-of-scope uses
+  </Accordion>
+  
+  <Accordion title="Be Honest">
+    Clearly document:
+    - Model failures and edge cases
+    - Performance gaps across demographics
+    - Uncertainty in predictions
+    - Limitations of training data
+  </Accordion>
+  
+  <Accordion title="Keep Updated">
+    Maintain model cards over time:
+    - Update with new evaluation results
+    - Document discovered issues
+    - Add user feedback and insights
+    - Version model card with model updates
+  </Accordion>
+  
+  <Accordion title="Make Accessible">
+    Ensure cards are easy to find and understand:
+    - Store with model artifacts
+    - Use clear, non-technical language
+    - Include visual aids and examples
+    - Provide contact information
+  </Accordion>
+</AccordionGroup>
+
+## Integration with Training
+
+Automate model card generation in your training pipeline:
+
+```python
+def train(config_path: Path):
+    # Load config and train model
+    trainer = get_trainer(...)
+    train_result = trainer.train()
+    
+    # Save model
+    trainer.save_model()
+    
+    # Generate model card
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "text-classification",
+        "language": "en",
+        "dataset_tags": "sst2",
+        "dataset": "SST-2",
+        "metrics": ["f1", "accuracy"],
+    }
+    trainer.create_model_card(**kwargs)
+    
+    logger.info(f"Model card saved to {training_args.output_dir}/README.md")
+    
+    # Upload to registry with model card
+    upload_to_registry(
+        model_name="my-model",
+        model_path=training_args.output_dir
+    )
+```
+
+## Checklist
+
+Use this checklist to ensure complete model documentation:
+
+- [ ] Model architecture and base model specified
+- [ ] Training data described (source, size, preprocessing)
+- [ ] Hyperparameters documented
+- [ ] Evaluation metrics reported
+- [ ] Performance across subgroups analyzed
+- [ ] Intended use cases listed
+- [ ] Out-of-scope uses identified
+- [ ] Known limitations documented
+- [ ] Ethical considerations addressed
+- [ ] Contact information provided
+- [ ] Code and reproduction instructions included
+- [ ] License specified
+- [ ] Carbon footprint estimated (if applicable)
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Model Cards Paper" icon="file-lines" href="https://arxiv.org/abs/1810.03993">
+    Original paper: "Model Cards for Model Reporting"
+  </Card>
+  <Card title="Google Model Cards" icon="google" href="https://modelcards.withgoogle.com/about">
+    Interactive playbook and examples
+  </Card>
+  <Card title="Model Card Toolkit" icon="toolbox" href="https://github.com/tensorflow/model-card-toolkit">
+    TensorFlow's model card generation toolkit
+  </Card>
+  <Card title="Example Cards" icon="github" href="https://github.com/ivylee/model-cards-and-datasheets">
+    Collection of model cards and datasheets
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Classic Training" icon="brain" href="./classic-training">
+  Learn to train BERT-based models with automatic model card generation
+</Card>

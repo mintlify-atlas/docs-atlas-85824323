@@ -1,0 +1,121 @@
+---
+title: "Module 3: Training Workflows"
+description: "Learn to structure ML training projects, track experiments, and manage configurations"
+---
+
+# Module 3: Training Workflows
+
+<Frame>
+  <img src="/experiments.jpg" alt="Experiment tracking" />
+</Frame>
+
+## Overview
+
+This module focuses on building production-ready training workflows with proper project structure, experiment tracking, and configuration management. You'll learn to implement both classic BERT-based models and modern LLM training pipelines.
+
+## What You'll Learn
+
+<CardGroup cols={2}>
+  <Card title="Project Structure" icon="folder-tree" href="./project-structure">
+    Python packaging, ML project templates, and code organization
+  </Card>
+  <Card title="Experiment Tracking" icon="chart-line" href="./experiment-tracking">
+    Track and manage ML experiments with W&B and other tools
+  </Card>
+  <Card title="Model Cards" icon="id-card" href="./model-cards">
+    Document models with standardized model cards and reporting
+  </Card>
+  <Card title="Classic Training" icon="brain" href="./classic-training">
+    BERT-based text classification with HuggingFace Transformers
+  </Card>
+  <Card title="LLM Training" icon="sparkles" href="./llm-training">
+    Fine-tune Phi-3 and other generative models with LoRA
+  </Card>
+  <Card title="Practice" icon="code" href="./practice">
+    Hands-on exercises and homework assignments
+  </Card>
+</CardGroup>
+
+## Key Topics
+
+### Training Infrastructure
+- Python project structure and packaging
+- Configuration management with Hydra and JSON configs
+- Experiment tracking with Weights & Biases
+- Model registry and versioning
+
+### Classic ML Training
+- BERT-based sequence classification
+- HuggingFace Transformers integration
+- Training metrics and evaluation
+- Model card generation
+
+### Modern LLM Training
+- Fine-tuning Phi-3 with LoRA/QLoRA
+- Parameter-efficient training techniques
+- Instruction-following datasets
+- GenAI-specific workflows
+
+### Testing & Quality
+- Code testing with pytest
+- Data validation with Great Expectations
+- Model behavioral testing
+- CI/CD integration
+
+## Reference Implementations
+
+This module includes two complete reference implementations:
+
+<CodeGroup>
+```bash Classic Example
+# BERT-based text classification
+cd module-3/classic-example
+make build
+make test
+python classic_example/cli.py train ./conf/example.json
+```
+
+```bash Generative Example
+# Phi-3 fine-tuning with LoRA
+cd module-3/generative-example
+make build
+python generative_example/cli.py train ./conf/example.json
+```
+</CodeGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Lightning-Hydra Template" icon="github" href="https://github.com/ashleve/lightning-hydra-template">
+    ML project template with PyTorch Lightning and Hydra
+  </Card>
+  <Card title="Experiment Tracking Tools" icon="microscope" href="https://neptune.ai/blog/best-ml-experiment-tracking-tools">
+    Compare 15+ ML experiment tracking platforms
+  </Card>
+  <Card title="Model Cards" icon="file-lines" href="https://arxiv.org/abs/1810.03993">
+    Original research paper on Model Cards for Model Reporting
+  </Card>
+  <Card title="Distributed Training" icon="network-wired" href="https://www.anyscale.com/blog/what-is-distributed-training">
+    Scale training to multiple GPUs and nodes
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Steps>
+  <Step title="Understand Project Structure">
+    Learn how to organize ML projects and Python packages
+  </Step>
+  <Step title="Set Up Experiment Tracking">
+    Configure W&B or Neptune for experiment logging
+  </Step>
+  <Step title="Train Classic Models">
+    Run BERT-based training with the classic example
+  </Step>
+  <Step title="Fine-Tune LLMs">
+    Train Phi-3 or similar models with LoRA
+  </Step>
+  <Step title="Complete Practice Tasks">
+    Implement training workflows for your project
+  </Step>
+</Steps>

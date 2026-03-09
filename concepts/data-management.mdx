@@ -1,0 +1,225 @@
+---
+title: "Data Management"
+description: "Storage, versioning, labeling, and efficient processing of ML datasets"
+---
+
+## Why Data Management is Critical
+
+Data is the foundation of every ML system. Poor data management leads to:
+- **Unreproducible experiments**: "Which dataset version produced this model?"
+- **Slow training**: Loading data becomes the bottleneck
+- **Data drift**: Production data diverges from training data
+- **Collaboration issues**: Team members can't share datasets easily
+
+Effective data management solves these problems through versioning, efficient formats, and proper storage infrastructure.
+
+## Storage Solutions
+
+### Object Storage (S3-Compatible)
+
+Object storage is the backbone of ML data pipelines:
+- **S3** (AWS), **GCS** (Google), **Azure Blob**: Cloud-native options
+- **MinIO**: Self-hosted S3-compatible storage (great for on-prem or local development)
+
+<Info>
+Object storage is cheaper than block storage and scales infinitely, making it ideal for large datasets, model checkpoints, and artifacts.
+</Info>
+
+#### Why MinIO for Development?
+
+MinIO lets you run an S3-compatible server locally:
+
+```bash
+docker run -p 9000:9000 -p 9001:9001 \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
+You can then use the same AWS SDK code in development and production:
+
+```python
+import boto3
+s3 = boto3.client('s3', endpoint_url='http://localhost:9000')
+s3.upload_file('data.csv', 'my-bucket', 'data.csv')
+```
+
+### Data Formats
+
+Choosing the right format dramatically affects performance:
+
+<CardGroup cols={3}>
+  <Card title="CSV" icon="file-csv">
+    Human-readable, but slow and large
+  </Card>
+  <Card title="Parquet" icon="file-arrow-down">
+    Columnar, compressed, 10-100x faster than CSV
+  </Card>
+  <Card title="Arrow/Feather" icon="bolt">
+    Zero-copy reads, excellent for in-memory operations
+  </Card>
+</CardGroup>
+
+**Benchmark Results** (from Module 2):
+
+| Format | Read Time | File Size |
+|--------|-----------|----------|
+| CSV | 12.64s | 100 MB |
+| Parquet | 0.85s | 25 MB |
+| Feather | 0.42s | 30 MB |
+
+<Note>
+For ML pipelines, use Parquet for storage and Feather for intermediate processing. Avoid CSV except for human inspection.
+</Note>
+
+## Data Versioning
+
+### DVC (Data Version Control)
+
+DVC tracks large files in Git without storing them:
+
+```bash
+# Track a dataset
+dvc add data/train.csv
+git add data/train.csv.dvc data/.gitignore
+git commit -m "Add training data v1"
+
+# Configure remote storage
+dvc remote add -d minio s3://ml-data
+dvc push
+```
+
+Now teammates can pull the exact dataset:
+
+```bash
+git pull
+dvc pull
+```
+
+DVC creates `.dvc` files with hashes that Git tracks, while the actual data lives in S3/MinIO.
+
+<Info>
+DVC also supports pipeline tracking, letting you version transformations and derived datasets alongside the code that created them.
+</Info>
+
+## Streaming Datasets
+
+For datasets too large to fit in memory, streaming is essential:
+
+```python
+from datasets import load_dataset
+
+# Stream from S3 without downloading everything
+ds = load_dataset('parquet', data_files='s3://bucket/data/*.parquet', streaming=True)
+for batch in ds['train'].iter(batch_size=32):
+    # Process batch
+    pass
+```
+
+**Popular libraries:**
+- **Hugging Face Datasets**: Streaming + caching + memory mapping
+- **MosaicML Streaming**: Optimized for multi-GPU training
+- **WebDataset**: Tar-based streaming format
+- **TensorFlow tf.data / PyTorch TorchData**: Native streaming APIs
+
+<Note>
+Streaming prevents OOM errors and reduces startup time. Use it for datasets > 50GB or when training on multiple nodes.
+</Note>
+
+## Efficient Batch Processing
+
+When running inference on large datasets, parallelization is key:
+
+**Module 2 Benchmark (10M rows):**
+
+| Method | Time |
+|--------|------|
+| Single worker | 12.64s |
+| ThreadPoolExecutor (16 workers) | 0.85s |
+| ProcessPoolExecutor (16 workers) | 4.03s |
+| Ray | 2.19s |
+
+<Info>
+Threads work best for I/O-bound tasks (API calls, disk reads). Processes are better for CPU-bound tasks (heavy computation). Ray adds distributed scheduling overhead but scales across machines.
+</Info>
+
+## Vector Databases
+
+For embedding-based retrieval (RAG, semantic search):
+
+<CardGroup cols={2}>
+  <Card title="LanceDB" icon="database">
+    Disk-based, handles billions of vectors, open-source
+  </Card>
+  <Card title="Chroma" icon="cube">
+    In-memory, easy setup, good for prototypes
+  </Card>
+  <Card title="Qdrant" icon="server">
+    Production-ready, supports filtering and hybrid search
+  </Card>
+  <Card title="Pinecone / Weaviate" icon="cloud">
+    Managed services with SLA and support
+  </Card>
+</CardGroup>
+
+**Example with LanceDB:**
+
+```python
+import lancedb
+
+db = lancedb.connect('my_db')
+table = db.create_table('documents', data=[
+    {'text': 'ML systems need good data', 'vector': [0.1, 0.2, ...]},
+    # ...
+])
+
+results = table.search([0.15, 0.18, ...]).limit(10).to_list()
+```
+
+LanceDB's columnar format (based on Arrow) makes it fast for analytical queries over embeddings.
+
+## Data Labeling
+
+### Argilla
+
+Argilla is an open-source platform for labeling and curating datasets:
+
+```bash
+docker run -p 6900:6900 argilla/argilla-quickstart:v2.0.0rc1
+```
+
+Features:
+- Human-in-the-loop labeling workflows
+- Active learning integration
+- Feedback collection for LLMs
+- Export to Hugging Face Datasets
+
+<Note>
+For production labeling, consider managed services like Scale AI, Labelbox, or Snorkel Flow. Argilla is excellent for team collaboration and rapid iteration.
+</Note>
+
+## Hands-On Examples
+
+Explore data management in [Module 2](/modules/module-2/overview):
+- Deploy MinIO on Kubernetes
+- Benchmark CSV vs Parquet vs Feather
+- Set up DVC with S3 remote
+- Build streaming dataloaders
+- Create vector databases with LanceDB
+- Set up Argilla for labeling
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Training Workflows" href="/concepts/training-workflows" icon="brain">
+    Use versioned data in training pipelines
+  </Card>
+  <Card title="Monitoring" href="/concepts/monitoring" icon="chart-line">
+    Detect data drift in production
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [DVC Documentation](https://dvc.org/doc)
+- [Hugging Face Datasets](https://huggingface.co/docs/datasets/)
+- [Parquet Format Specification](https://parquet.apache.org/docs/)
+- [LanceDB Documentation](https://lancedb.github.io/lancedb/)

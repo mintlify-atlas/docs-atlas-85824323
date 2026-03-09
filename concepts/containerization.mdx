@@ -1,0 +1,155 @@
+---
+title: "Containerization & Infrastructure"
+description: "Understanding containerization fundamentals and Kubernetes for ML deployments"
+---
+
+## Why Containerization Matters
+
+Containerization has become the foundation of modern ML systems. By packaging your code, dependencies, and runtime environment into a single unit, containers solve the classic "works on my machine" problem and enable consistent deployments across development, staging, and production.
+
+For ML practitioners, containers provide:
+- **Reproducibility**: Freeze exact versions of Python, CUDA, system libraries, and your code
+- **Portability**: Run the same container locally, on Kubernetes, or serverless platforms
+- **Isolation**: Avoid dependency conflicts between different models or services
+- **Scalability**: Deploy multiple replicas and scale horizontally as needed
+
+## Core Concepts
+
+### Docker Basics
+
+Docker is the most popular containerization platform. A **Dockerfile** defines your container image as layers:
+
+```dockerfile
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "train.py"]
+```
+
+Each instruction creates a layer that's cached, making rebuilds faster. For ML workloads, consider:
+- Using minimal base images to reduce size
+- Installing heavy dependencies (PyTorch, TensorFlow) in early layers
+- Copying code last so changes don't invalidate cached layers
+
+<Note>
+Multi-stage builds let you compile or download models in one stage and copy only the artifacts to a smaller runtime image.
+</Note>
+
+### Container Registries
+
+After building images, push them to a registry:
+- **GitHub Container Registry (ghcr.io)**: Free for public repos
+- **Docker Hub**: Popular but rate-limited for anonymous pulls
+- **AWS ECR / GCP Artifact Registry**: Integrated with cloud platforms
+
+Versioning with tags (e.g., `app:v1.2.3` or `app:latest`) helps track what's running where.
+
+### Kubernetes Fundamentals
+
+Kubernetes (K8s) orchestrates containers at scale. Key abstractions for ML:
+
+<CardGroup cols={2}>
+  <Card title="Pods" icon="cube">
+    The smallest deployable unit—usually one container, but can include sidecars for logging or proxies
+  </Card>
+  <Card title="Jobs" icon="check-circle">
+    Run containers to completion (perfect for training runs)
+  </Card>
+  <Card title="Deployments" icon="layer-group">
+    Maintain a desired number of replicas (ideal for serving APIs)
+  </Card>
+  <Card title="Services" icon="network-wired">
+    Provide stable networking and load balancing across pods
+  </Card>
+</CardGroup>
+
+#### Example: Running a Training Job
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bert-training
+spec:
+  template:
+    spec:
+      containers:
+      - name: trainer
+        image: ghcr.io/myorg/bert-trainer:v1.0
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+      restartPolicy: Never
+```
+
+This Job requests one GPU and runs your training container once. K8s handles scheduling, retries on failure, and cleanup.
+
+## Local Development
+
+<Info>
+Use **kind** (Kubernetes in Docker) or **minikube** to run a full K8s cluster locally. This lets you test manifests before deploying to production.
+</Info>
+
+## Cloud Platforms
+
+Production K8s is typically managed:
+- **AWS EKS**: Integrates with IAM, EBS, and other AWS services
+- **GCP GKE**: Autopilot mode handles node management
+- **Azure AKS**: Good GPU support for ML workloads
+
+For simpler needs, consider:
+- **Google Cloud Run**: Serverless containers (auto-scaling from zero)
+- **AWS Fargate**: Serverless compute for ECS/EKS
+- **Railway / Modal**: Developer-friendly platforms for pet projects
+
+<Note>
+Serverless options can be more cost-effective for intermittent workloads, while full K8s gives you more control for high-throughput serving.
+</Note>
+
+## CI/CD Integration
+
+Automate building and pushing containers:
+
+```yaml
+# .github/workflows/build.yaml
+name: Build Docker Image
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build image
+        run: docker build -t myapp:${{ github.sha }} .
+      - name: Push to registry
+        run: docker push myapp:${{ github.sha }}
+```
+
+Popular CI/CD platforms include GitHub Actions, CircleCI, Jenkins, and GitLab CI.
+
+## Hands-On Examples
+
+Explore practical containerization in [Module 1](/modules/module-1/overview):
+- Build ML and web app containers
+- Deploy to local Kubernetes with kind
+- Use k9s to monitor resources
+- Push images to GitHub Container Registry
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Data Management" href="/concepts/data-management" icon="database">
+    Learn how to store and version datasets
+  </Card>
+  <Card title="Model Serving" href="/concepts/model-serving" icon="server">
+    Deploy containers as production APIs
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [Docker Best Practices](https://docs.docker.com/develop/dev-best-practices/)
+- [Kubernetes Documentation](https://kubernetes.io/docs/home/)
+- [kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/)

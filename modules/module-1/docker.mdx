@@ -1,0 +1,308 @@
+---
+title: "Docker Containerization"
+description: "Build, run, and share Docker images for ML applications"
+---
+
+## Introduction
+
+Docker allows you to package your ML applications with all dependencies into portable containers. This ensures consistency across development, testing, and production environments.
+
+<Note>
+Containers are lightweight, isolated environments that share the host OS kernel, making them more efficient than virtual machines.
+</Note>
+
+## Getting Started
+
+### Hello World
+
+Test your Docker installation by running the official hello-world image:
+
+```bash
+docker pull hello-world
+docker run hello-world
+```
+
+This confirms Docker is properly configured on your system.
+
+## Building ML Containers
+
+Module 1 includes two sample applications that demonstrate different containerization patterns.
+
+### ML Training Application
+
+The `app-ml` container simulates a machine learning training job:
+
+<CodeGroup>
+
+```dockerfile Dockerfile
+FROM python:3.12
+CMD python -c "import time; time.sleep(5); print(f'AUC = {0.9999}')"
+```
+
+</CodeGroup>
+
+**Build the image:**
+
+```bash
+docker build --tag app-ml:latest ./app-ml
+```
+
+**Run the container:**
+
+```bash
+docker run -it --rm --name app-ml-test-run app-ml:latest
+```
+
+**Run with custom command:**
+
+```bash
+docker run -it --rm --name app-ml-test-run app-ml:latest \
+  python -c "import time; time.sleep(5); print(f'AUC = {0.0001}')"
+```
+
+<Note>
+The `-it` flag provides an interactive terminal, `--rm` automatically removes the container after exit, and `--name` assigns a friendly identifier.
+</Note>
+
+### Web Application
+
+The `app-web` container runs a simple HTTP server for serving models:
+
+<CodeGroup>
+
+```dockerfile Dockerfile
+FROM python:3.12
+CMD python -m http.server 8080
+```
+
+</CodeGroup>
+
+**Build the image:**
+
+```bash
+docker build --tag app-web:latest ./app-web
+```
+
+**Run with port mapping:**
+
+```bash
+docker run -it --rm -p 8080:8080 --name app-web-test-run app-web:latest
+```
+
+**Test the endpoint:**
+
+In a separate terminal, verify the server is running:
+
+```bash
+curl http://0.0.0.0:8080/
+```
+
+<Warning>
+The `-p 8080:8080` flag maps port 8080 from the container to your host machine. Without this, the service won't be accessible externally.
+</Warning>
+
+## Multi-Stage Builds
+
+For projects with multiple applications, use multi-stage Dockerfiles to share common dependencies:
+
+<CodeGroup>
+
+```dockerfile Dockerfile
+# Base layer with all dependencies
+FROM python:3.12 as base
+
+WORKDIR /app
+
+RUN pip install --upgrade pip
+
+
+# Take models and create deployment
+FROM base AS app-web
+CMD python -m http.server 8080
+
+
+# Take models and create training
+FROM base AS app-ml
+CMD python -c "import time; time.sleep(5); print(f'AUC = {0.9999}')"
+```
+
+</CodeGroup>
+
+**Build specific targets:**
+
+<Tabs>
+  <Tab title="Web App">
+    ```bash
+    docker build --tag app-web:latest --target app-web ./app-multi-build
+    ```
+  </Tab>
+  <Tab title="ML App">
+    ```bash
+    docker build --tag app-ml:latest --target app-ml ./app-multi-build
+    ```
+  </Tab>
+</Tabs>
+
+### Benefits of Multi-Stage Builds
+
+- **Shared dependencies**: Install common packages once in the base layer
+- **Smaller images**: Only include what's needed for each target
+- **Single source**: Maintain one Dockerfile for multiple applications
+- **Consistent environments**: Ensure all apps use identical base configurations
+
+## Sharing Images
+
+To deploy containers to production, push them to a container registry.
+
+### GitHub Container Registry
+
+<Steps>
+  <Step title="Authenticate">
+    Set up credentials for GitHub Container Registry (ghcr.io):
+    
+    ```bash
+    export GITHUB_TOKEN=your_token_here
+    export GITHUB_USER=your_username
+    echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USER --password-stdin
+    ```
+  </Step>
+  
+  <Step title="Tag Images">
+    Tag your images with the registry URL:
+    
+    ```bash
+    docker tag app-ml:latest ghcr.io/your-username/app-ml:latest
+    docker tag app-web:latest ghcr.io/your-username/app-web:latest
+    ```
+  </Step>
+  
+  <Step title="Push to Registry">
+    Upload images to the registry:
+    
+    ```bash
+    docker push ghcr.io/your-username/app-ml:latest
+    docker push ghcr.io/your-username/app-web:latest
+    ```
+  </Step>
+</Steps>
+
+<Note>
+GitHub Container Registry (ghcr.io) provides free storage for public images and is tightly integrated with GitHub Actions for automated CI/CD workflows.
+</Note>
+
+## Container Registry Options
+
+Choose a registry that fits your infrastructure and requirements:
+
+| Registry | Best For | Notes |
+|----------|----------|-------|
+| [GitHub Container Registry](https://github.com/features/packages) | GitHub users, CI/CD integration | Free for public images |
+| [Docker Hub](https://hub.docker.com/) | Public images, community sharing | Most popular registry |
+| [Amazon ECR](https://aws.amazon.com/ecr/) | AWS deployments | Integrates with ECS/EKS |
+| [Google Container Registry](https://cloud.google.com/container-registry) | GCP deployments | Integrates with GKE |
+
+## Best Practices
+
+### Image Optimization
+
+1. **Use specific base images**: `python:3.12-slim` instead of `python:3.12` for smaller images
+2. **Leverage build cache**: Order Dockerfile commands from least to most frequently changing
+3. **Multi-stage builds**: Separate build and runtime dependencies
+4. **Minimize layers**: Combine RUN commands with `&&`
+
+### Security
+
+<Warning>
+Never hardcode secrets in Dockerfiles. Use environment variables or secret management tools like Docker secrets or Kubernetes secrets.
+</Warning>
+
+- Scan images for vulnerabilities with `docker scan`
+- Use official base images from trusted sources
+- Run containers as non-root users when possible
+- Keep base images updated
+
+### Development Workflow
+
+```bash
+# Build
+docker build -t my-app:dev .
+
+# Test locally
+docker run --rm my-app:dev pytest
+
+# Tag for production
+docker tag my-app:dev my-app:v1.0.0
+
+# Push to registry
+docker push my-app:v1.0.0
+```
+
+## Debugging Containers
+
+### Inspecting Running Containers
+
+```bash
+# List running containers
+docker ps
+
+# View logs
+docker logs container-name
+
+# Execute commands in running container
+docker exec -it container-name bash
+
+# Inspect container details
+docker inspect container-name
+```
+
+### Common Issues
+
+<Tabs>
+  <Tab title="Port Already in Use">
+    ```bash
+    # Find process using port 8080
+    lsof -i :8080
+    
+    # Use a different host port
+    docker run -p 8081:8080 app-web:latest
+    ```
+  </Tab>
+  
+  <Tab title="Image Won't Build">
+    ```bash
+    # Clear build cache
+    docker builder prune
+    
+    # Build without cache
+    docker build --no-cache -t app:latest .
+    ```
+  </Tab>
+  
+  <Tab title="Container Exits Immediately">
+    ```bash
+    # View exit logs
+    docker logs container-name
+    
+    # Run with interactive shell
+    docker run -it --entrypoint /bin/bash app:latest
+    ```
+  </Tab>
+</Tabs>
+
+## Resources
+
+### Essential Reading
+
+- [Docker Curriculum](https://docker-curriculum.com/) - Comprehensive Docker tutorial
+- [Docker and Python for Data Science](https://www.youtube.com/watch?v=Jq68axbKIbg) - Best practices video
+- [0 to Production-Ready Docker](https://www.youtube.com/watch?v=EC0CSevbt9k) - Production patterns
+
+### Documentation
+
+- [Docker Hub Overview](https://docs.docker.com/docker-hub/)
+- [Dockerfile Best Practices](https://docs.docker.com/develop/dev-best-practices/)
+- [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/)
+
+## Next Steps
+
+Now that you understand containerization, learn how to orchestrate these containers at scale with [Kubernetes](/modules/module-1/kubernetes).

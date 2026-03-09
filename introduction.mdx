@@ -1,0 +1,120 @@
+---
+title: "Introduction"
+description: "Practical exercises and reference implementations for Machine Learning in Production"
+---
+
+# ML in Production Practice
+
+Welcome to the ML in Production Practice documentation. This repository contains hands-on exercises and reference implementations for the [ML in Production](https://edu.kyrylai.com/courses/ml-in-production) course.
+
+## What You'll Learn
+
+This course covers the complete lifecycle of taking machine learning models from development to production, including:
+
+<CardGroup cols={2}>
+  <Card title="Infrastructure & Deployment" icon="server" href="/concepts/containerization">
+    Containerization with Docker, Kubernetes orchestration, and CI/CD pipelines
+  </Card>
+  <Card title="Data Management" icon="database" href="/concepts/data-management">
+    Storage systems, data formats, streaming pipelines, and vector databases
+  </Card>
+  <Card title="Training Workflows" icon="brain" href="/concepts/training-workflows">
+    Experiment tracking, configuration management, and distributed training
+  </Card>
+  <Card title="Model Serving" icon="rocket" href="/concepts/model-serving">
+    FastAPI endpoints, inference servers, and LLM deployment with vLLM
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="Pipeline Orchestration" icon="diagram-project" href="/concepts/pipeline-orchestration">
+    Airflow, Kubeflow, and Dagster for ML workflows
+  </Card>
+  <Card title="Optimization" icon="gauge-high" href="/concepts/optimization">
+    Load testing, autoscaling, and model quantization
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/concepts/monitoring">
+    Observability, metrics, and data drift detection
+  </Card>
+  <Card title="Production Patterns" icon="cloud" href="/concepts/production-patterns">
+    Cloud platforms, buy vs build decisions, and best practices
+  </Card>
+</CardGroup>
+
+## Course Structure
+
+The course is organized into 8 self-contained modules. You can work through them sequentially or dive into specific topics based on your needs.
+
+<Steps>
+  <Step title="Module 1: Infrastructure">
+    Learn containerization with Docker, Kubernetes deployment, CI/CD workflows, and serverless platforms like Modal and Railway.
+  </Step>
+  <Step title="Module 2: Data Management">
+    Set up MinIO storage, work with streaming datasets, implement vector databases, and configure data labeling with Argilla.
+  </Step>
+  <Step title="Module 3: Training Workflows">
+    Structure ML projects, track experiments, create model cards, and train both classic BERT models and fine-tune LLMs.
+  </Step>
+  <Step title="Module 4: Pipeline Orchestration">
+    Build ML pipelines with Airflow, Kubeflow, and Dagster for production workflows.
+  </Step>
+  <Step title="Module 5: Model Serving">
+    Deploy models with FastAPI, create Streamlit interfaces, use Triton and KServe inference servers, and serve LLMs with vLLM.
+  </Step>
+  <Step title="Module 6: Optimization">
+    Conduct load testing, implement autoscaling, optimize models with quantization, and set up async inference.
+  </Step>
+  <Step title="Module 7: Monitoring">
+    Configure observability with SigNoz, set up Grafana dashboards, and monitor data drift with Evidently and Seldon.
+  </Step>
+  <Step title="Module 8: Cloud Platforms">
+    Evaluate buy vs build decisions and deploy multi-model endpoints on AWS SageMaker.
+  </Step>
+</Steps>
+
+## Prerequisites
+
+- Python 3.10 or higher
+- Basic understanding of machine learning concepts
+- Familiarity with command line operations
+- Docker installed (for containerization modules)
+
+## Quick Start
+
+Ready to get started? Head over to the [Quickstart](/quickstart) guide to set up your environment and run your first example.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="bolt" href="/quickstart">
+    Get up and running in minutes
+  </Card>
+  <Card title="Setup Instructions" icon="wrench" href="/setup">
+    Detailed environment setup
+  </Card>
+  <Card title="Browse Modules" icon="book" href="/modules/module-1/overview">
+    Explore the course modules
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/kyryl-opens-ml/ml-in-production-practice">
+    View the source code
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+<CardGroup cols={2}>
+  <Card title="Course Page" icon="graduation-cap" href="https://edu.kyrylai.com/courses/ml-in-production">
+    Access the full course curriculum
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/5NF2NAsGEM">
+    Ask questions and connect with others
+  </Card>
+  <Card title="Blog" icon="newspaper" href="https://kyrylai.com/blog/">
+    Read additional articles and insights
+  </Card>
+  <Card title="Report Issues" icon="bug" href="https://github.com/kyryl-opens-ml/ml-in-production-practice/issues">
+    Found a problem? Let us know
+  </Card>
+</CardGroup>
+
+## Versioning
+
+The main branch contains the most up-to-date materials. A protected `2024-version` branch preserves the 2024 and early 2025 edition of the course for reference.

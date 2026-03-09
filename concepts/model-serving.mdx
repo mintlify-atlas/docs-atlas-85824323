@@ -1,0 +1,380 @@
+---
+title: "Model Serving"
+description: "Deploying ML models as production APIs with FastAPI, Triton, vLLM, and KServe"
+---
+
+## Why Serving Architecture Matters
+
+Training a model is only half the battle. Serving it in production requires:
+- **Low latency**: Users expect < 100ms response times
+- **High throughput**: Handle thousands of requests per second
+- **Reliability**: 99.9%+ uptime with graceful degradation
+- **Scalability**: Auto-scale from 1 to 1000 replicas
+- **Versioning**: Deploy new models without downtime
+
+The serving layer bridges offline training and online inference.
+
+## Serving Stack Overview
+
+<CardGroup cols={2}>
+  <Card title="API Framework" icon="code">
+    **FastAPI** for custom logic, **Streamlit** for demos
+  </Card>
+  <Card title="Inference Server" icon="server">
+    **Triton** for optimized serving, **vLLM** for LLMs
+  </Card>
+  <Card title="Orchestration" icon="cubes">
+    **KServe** for Kubernetes-native serving
+  </Card>
+  <Card title="Load Balancing" icon="scale-balanced">
+    Kubernetes Services, Istio, or cloud load balancers
+  </Card>
+</CardGroup>
+
+## FastAPI for Custom Serving
+
+FastAPI is a modern Python framework for building APIs:
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+import torch
+
+app = FastAPI()
+model = torch.load('model.pt')
+
+class PredictionRequest(BaseModel):
+    text: str
+
+class PredictionResponse(BaseModel):
+    label: str
+    confidence: float
+
+@app.post('/predict', response_model=PredictionResponse)
+def predict(request: PredictionRequest):
+    inputs = tokenize(request.text)
+    with torch.no_grad():
+        outputs = model(inputs)
+    return PredictionResponse(
+        label=outputs.argmax().item(),
+        confidence=outputs.max().item()
+    )
+```
+
+**Why FastAPI?**
+- **Fast**: Built on Starlette and Pydantic (async, type-safe)
+- **Auto docs**: Swagger UI at `/docs`
+- **Validation**: Pydantic models validate inputs
+- **Production-ready**: Works with Gunicorn/Uvicorn
+
+<Info>
+Use `uvicorn app:app --workers 4` for multi-process serving. Each worker loads the model once, sharing memory across requests.
+</Info>
+
+### Deployment
+
+```yaml
+# k8s/app-fastapi.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-fastapi
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: api
+        image: myorg/fastapi-app:v1
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-fastapi
+spec:
+  selector:
+    app: app-fastapi
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: LoadBalancer
+```
+
+Kubernetes automatically load-balances requests across 3 replicas.
+
+## Streamlit for Interactive Demos
+
+Streamlit turns Python scripts into web apps:
+
+```python
+import streamlit as st
+import torch
+
+st.title('Sentiment Analysis')
+text = st.text_area('Enter text')
+
+if st.button('Predict'):
+    model = load_model()
+    prediction = model.predict(text)
+    st.write(f'Sentiment: {prediction}')
+```
+
+**Use cases:**
+- Internal demos for stakeholders
+- Prototyping before building a full API
+- Data labeling interfaces
+
+<Note>
+Streamlit is great for prototypes but not production APIs. It's synchronous and doesn't scale well under load.
+</Note>
+
+## Triton Inference Server
+
+Triton (by NVIDIA) optimizes inference for production:
+
+**Features:**
+- **Multi-framework**: PyTorch, TensorFlow, ONNX, TensorRT
+- **Dynamic batching**: Combine multiple requests into one batch
+- **Model versioning**: Serve multiple versions simultaneously
+- **GPU optimization**: TensorRT, mixed precision
+
+**PyTriton** provides a Python-first interface:
+
+```python
+from pytriton.decorators import batch
+from pytriton.model_config import ModelConfig, Tensor
+from pytriton.triton import Triton
+import numpy as np
+
+@batch
+def infer_fn(inputs: list[np.ndarray]) -> list[np.ndarray]:
+    # Batched inference
+    return [model.predict(inputs[0])]
+
+with Triton() as triton:
+    triton.bind(
+        model_name='my-model',
+        infer_func=infer_fn,
+        inputs=[Tensor(name='input', dtype=np.float32, shape=(-1, 768))],
+        outputs=[Tensor(name='output', dtype=np.float32, shape=(-1, 2))],
+        config=ModelConfig(max_batch_size=32)
+    )
+    triton.serve()
+```
+
+**Dynamic batching** automatically groups requests arriving within a time window (e.g., 10ms), dramatically improving GPU utilization:
+
+| Batching | Throughput |
+|----------|------------|
+| Single request | 50 req/s |
+| Dynamic batch (max 32) | 800 req/s |
+
+<Info>
+For models with >100ms inference time, dynamic batching can improve throughput 10-20x.
+</Info>
+
+## Serving LLMs with vLLM
+
+vLLM is optimized for large language model inference:
+
+```bash
+vllm serve microsoft/Phi-3-mini-4k-instruct \
+  --dtype auto \
+  --max-model-len 512 \
+  --gpu-memory-utilization 0.8
+```
+
+**Key optimizations:**
+- **PagedAttention**: Efficient KV cache management (reduces memory by 60%)
+- **Continuous batching**: Add/remove requests dynamically
+- **Speculative decoding**: Use small model to draft, large model to verify
+
+**Client:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url='http://localhost:8000/v1', api_key='dummy')
+response = client.chat.completions.create(
+    model='microsoft/Phi-3-mini-4k-instruct',
+    messages=[{'role': 'user', 'content': 'Explain ML serving'}]
+)
+```
+
+vLLM exposes an OpenAI-compatible API, making it a drop-in replacement.
+
+### LoRA Adapters
+
+vLLM supports dynamic LoRA loading:
+
+```bash
+vllm serve microsoft/Phi-3-mini-4k-instruct \
+  --enable-lora \
+  --max-lora-rank 64
+```
+
+```python
+response = client.chat.completions.create(
+    model='microsoft/Phi-3-mini-4k-instruct',
+    messages=[...],
+    extra_body={'lora_adapter': 's3://bucket/sql-adapter'}
+)
+```
+
+This lets you serve one base model with multiple fine-tuned adapters, saving GPU memory.
+
+<Note>
+LoRA adapters add less than 10ms latency but reduce memory by 90% compared to serving separate full models.
+</Note>
+
+## KServe: Kubernetes-Native Serving
+
+KServe automates model deployment on Kubernetes:
+
+```yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: custom-model
+spec:
+  predictor:
+    containers:
+    - name: model
+      image: myorg/predictor:v1
+      ports:
+      - containerPort: 8080
+```
+
+**Features:**
+- **Autoscaling**: Scale to zero when idle (via KNative)
+- **Canary deployments**: Route 10% traffic to new version
+- **Explainability**: Built-in Alibi/SHAP integration
+- **Batching**: Transform requests before prediction
+
+**Autoscaling example:**
+
+```yaml
+metadata:
+  annotations:
+    autoscaling.knative.dev/minScale: "1"
+    autoscaling.knative.dev/maxScale: "10"
+    autoscaling.knative.dev/target: "100"  # Target 100 concurrent requests
+```
+
+KServe uses Istio for traffic routing and monitoring.
+
+<Info>
+KServe is ideal if you're already on Kubernetes and need advanced features like multi-model serving or A/B testing.
+</Info>
+
+## Testing and Load Testing
+
+**Unit tests:**
+
+```python
+from fastapi.testclient import TestClient
+
+client = TestClient(app)
+response = client.post('/predict', json={'text': 'test'})
+assert response.status_code == 200
+assert 'label' in response.json()
+```
+
+**Load tests with Locust:**
+
+```python
+from locust import HttpUser, task
+
+class ModelUser(HttpUser):
+    @task
+    def predict(self):
+        self.client.post('/predict', json={'text': 'test input'})
+```
+
+Run with `locust -f load_test.py --users 100 --spawn-rate 10`.
+
+**K6 for advanced scenarios:**
+
+```javascript
+import http from 'k6/http';
+
+export default function() {
+  http.post('http://api/predict', JSON.stringify({text: 'test'}));
+}
+```
+
+K6 provides better metrics and integrates with Grafana.
+
+## Async Inference
+
+For long-running tasks (>30s), use async inference:
+
+**Architecture:**
+
+```
+Client → API (push to queue) → Worker (process) → DB (store result) ← Client (poll)
+```
+
+**Example with SQS:**
+
+```python
+import boto3
+
+sqs = boto3.client('sqs')
+queue_url = 'https://sqs.us-east-1.amazonaws.com/queue'
+
+@app.post('/predict_async')
+def predict_async(request: PredictionRequest):
+    job_id = str(uuid.uuid4())
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=json.dumps({'job_id': job_id, 'text': request.text})
+    )
+    return {'job_id': job_id}
+
+@app.get('/result/{job_id}')
+def get_result(job_id: str):
+    result = db.get(job_id)
+    if result:
+        return {'status': 'complete', 'result': result}
+    return {'status': 'pending'}
+```
+
+Workers poll the queue and process jobs.
+
+<Note>
+For production, use managed queues (AWS SQS, Google Pub/Sub) instead of Redis. They handle retries and dead-letter queues.
+</Note>
+
+## Hands-On Examples
+
+Explore serving in [Module 5](/modules/module-5/overview):
+- Build FastAPI and Streamlit apps
+- Deploy with PyTriton
+- Serve LLMs with vLLM + LoRA
+- Set up KServe on Kubernetes
+- Load test with Locust and K6
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Optimization" href="/concepts/optimization" icon="gauge-high">
+    Make inference faster and cheaper
+  </Card>
+  <Card title="Monitoring" href="/concepts/monitoring" icon="chart-line">
+    Track serving performance
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Triton Inference Server](https://github.com/triton-inference-server/server)
+- [vLLM Documentation](https://docs.vllm.ai/)
+- [KServe Documentation](https://kserve.github.io/website/)

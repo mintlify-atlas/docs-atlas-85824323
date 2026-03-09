@@ -1,0 +1,422 @@
+---
+title: "Practice: Cloud Platforms"
+description: "Compare managed ML platforms and implement multi-model deployments"
+---
+
+## Overview
+
+In this practice exercise, you'll compare managed ML platforms and implement multi-model endpoints on both AWS SageMaker and GCP Vertex AI. This hands-on experience will help you understand the trade-offs between platforms and gain practical deployment experience.
+
+## Learning Objectives
+
+By completing this exercise, you will:
+
+1. Deploy multiple models on AWS SageMaker multi-model endpoints
+2. Deploy multiple models on GCP Vertex AI
+3. Compare the developer experience, features, and costs of each platform
+4. Evaluate buy vs build decisions for your specific context
+5. Document platform recommendations with pros and cons
+
+## Tasks
+
+### Task 1: AWS SageMaker Multi-Model Deployment
+
+<Steps>
+  <Step title="Setup AWS Environment">
+    Configure your AWS credentials and create required IAM roles:
+    
+    ```bash
+    # Configure AWS CLI
+    aws configure
+    
+    # Create SageMaker execution role (if not exists)
+    aws iam create-role \
+        --role-name sagemaker-execution-role \
+        --assume-role-policy-document file://trust-policy.json
+    
+    # Attach required policies
+    aws iam attach-role-policy \
+        --role-name sagemaker-execution-role \
+        --policy-arn arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+    ```
+  </Step>
+  
+  <Step title="Prepare Models">
+    Create at least 2 different models for deployment:
+    
+    - One image classification model (e.g., ResNet, MobileNet)
+    - One text/tabular model (e.g., simple classifier)
+    
+    Package them in Triton-compatible format:
+    
+    ```
+    model_registry/
+    ├── image_classifier_v1/
+    │   ├── config.pbtxt
+    │   └── 1/
+    │       └── model.pt
+    └── text_classifier_v1/
+        ├── config.pbtxt
+        └── 1/
+            └── model.pt
+    ```
+  </Step>
+  
+  <Step title="Deploy Multi-Model Endpoint">
+    Use the provided CLI tool to create and deploy:
+    
+    ```bash
+    # Create endpoint
+    python cli.py create-endpoint
+    
+    # Add models
+    python cli.py add-model ./model_registry/image_classifier_v1/ image_v1.tar.gz
+    python cli.py add-model ./model_registry/text_classifier_v1/ text_v1.tar.gz
+    
+    # Verify upload
+    aws s3 ls s3://your-bucket/models/
+    ```
+  </Step>
+  
+  <Step title="Test Inference">
+    Invoke both models and measure performance:
+    
+    ```bash
+    # Test image model
+    python cli.py call-model-image image_v1.tar.gz
+    
+    # Test text model
+    python cli.py call-model-vector text_v1.tar.gz
+    ```
+    
+    Measure:
+    - Cold start latency (first request)
+    - Warm latency (subsequent requests)
+    - Throughput (requests per second)
+  </Step>
+  
+  <Step title="Monitor and Optimize">
+    Check CloudWatch metrics and optimize:
+    
+    ```bash
+    # View invocation metrics
+    aws cloudwatch get-metric-statistics \
+        --namespace AWS/SageMaker \
+        --metric-name ModelLoadingLatency \
+        --dimensions Name=EndpointName,Value=sagemaker-poc
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+**Success Criteria:**
+- Multi-model endpoint successfully created
+- At least 2 models deployed and callable
+- Performance metrics documented
+- Code committed to repository
+</Tip>
+
+### Task 2: GCP Vertex AI Multi-Model Deployment
+
+<Steps>
+  <Step title="Setup GCP Environment">
+    Configure GCP credentials and enable required APIs:
+    
+    ```bash
+    # Authenticate
+    gcloud auth login
+    gcloud config set project YOUR_PROJECT_ID
+    
+    # Enable APIs
+    gcloud services enable aiplatform.googleapis.com
+    gcloud services enable storage.googleapis.com
+    ```
+  </Step>
+  
+  <Step title="Deploy Models to Vertex AI">
+    Upload and deploy models:
+    
+    ```python
+    from google.cloud import aiplatform
+    
+    aiplatform.init(project="YOUR_PROJECT_ID", location="us-central1")
+    
+    # Upload model
+    model = aiplatform.Model.upload(
+        display_name="image-classifier",
+        artifact_uri="gs://your-bucket/models/image_v1",
+        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/pytorch-gpu.1-13:latest",
+    )
+    
+    # Deploy to endpoint
+    endpoint = model.deploy(
+        machine_type="n1-standard-4",
+        accelerator_type="NVIDIA_TESLA_T4",
+        accelerator_count=1,
+    )
+    ```
+  </Step>
+  
+  <Step title="Test Inference">
+    Invoke models and compare with SageMaker:
+    
+    ```python
+    # Make prediction
+    prediction = endpoint.predict(instances=[{
+        "input": input_data.tolist()
+    }])
+    
+    print(prediction.predictions)
+    ```
+  </Step>
+  
+  <Step title="Compare Approaches">
+    Document differences in:
+    - Deployment process complexity
+    - API ergonomics
+    - Monitoring capabilities
+    - Cost structure
+  </Step>
+</Steps>
+
+<Note>
+**Vertex AI Note:** Vertex AI doesn't have direct multi-model endpoint support like SageMaker. You'll need to:
+- Deploy models to separate endpoints, or
+- Use a custom prediction container that routes to multiple models, or
+- Use Vertex AI Prediction with NVIDIA Triton
+</Note>
+
+### Task 3: Platform Comparison Document
+
+Create a comprehensive comparison document covering:
+
+<Tabs>
+  <Tab title="Technical Comparison">
+
+| Feature | AWS SageMaker | GCP Vertex AI | Winner |
+|---------|---------------|---------------|--------|
+| Multi-model endpoints | Native support | Custom container needed | AWS |
+| Deployment API | Boto3 (verbose) | Cloud SDK (cleaner) | ? |
+| Monitoring | CloudWatch + Model Monitor | Cloud Monitoring | ? |
+| Custom containers | Full support | Full support | Tie |
+| AutoML | Built-in | Strong AutoML | ? |
+| GPU support | Wide range | Good selection | ? |
+| Async inference | Native support | Need Cloud Tasks | AWS |
+| Framework support | All major frameworks | All major frameworks | Tie |
+
+</Tab>
+  
+  <Tab title="Cost Comparison">
+
+Calculate costs for your workload:
+
+**Scenario:** 10 models, 100K predictions/day
+
+**AWS SageMaker:**
+```
+Multi-model endpoint: 1 × ml.g5.xlarge
+- Compute: $1.41/hour × 730 hours = $1,029/month
+- Storage: 50GB × $0.10/GB = $5/month
+- Inference: 100K × $0.00 (included) = $0
+Total: ~$1,034/month
+```
+
+**GCP Vertex AI:**
+```
+Separate endpoints: 10 × n1-standard-4 + T4 GPU
+- Compute: 10 × $0.60/hour × 730 hours = $4,380/month
+- Storage: 50GB × $0.026/GB = $1.30/month
+- Predictions: 100K × $0.00 (included) = $0
+Total: ~$4,381/month
+
+OR with custom multi-model container:
+- Compute: 1 × n1-standard-4 + T4 = $438/month
+- Storage: $1.30/month
+Total: ~$439/month
+```
+
+</Tab>
+  
+  <Tab title="Developer Experience">
+
+**AWS SageMaker:**
+
+- ✅ Comprehensive documentation
+- ✅ Large community and examples
+- ⚠️ Steep learning curve (many AWS services)
+- ⚠️ Verbose API (boto3)
+- ✅ Strong integration with AWS ecosystem
+
+**GCP Vertex AI:**
+
+- ✅ Cleaner API design
+- ✅ Good integration with GCP services
+- ⚠️ Smaller community
+- ⚠️ Less mature than SageMaker
+- ✅ Strong AutoML capabilities
+
+</Tab>
+  
+  <Tab title="Recommendation">
+
+Provide your recommendation based on:
+
+1. **Use AWS SageMaker if:**
+   - You need multi-model endpoints (native support)
+   - You're already in AWS ecosystem
+   - You need async inference
+   - You value extensive documentation/community
+
+2. **Use GCP Vertex AI if:**
+   - You prefer cleaner APIs
+   - You're in GCP ecosystem
+   - You need strong AutoML
+   - You're using TensorFlow extensively
+
+3. **Build custom if:**
+   - You have very specific requirements
+   - You're at massive scale (1000s of models)
+   - You need features not available in either platform
+   - You have large ML platform team
+
+</Tab>
+</Tabs>
+
+## Deliverables
+
+<CardGroup cols={2}>
+  <Card title="PR1: AWS SageMaker" icon="github">
+    Code for multi-model deployment on AWS SageMaker with:
+    - CLI tool for endpoint management
+    - At least 2 different model types
+    - Testing scripts
+    - README with instructions
+  </Card>
+  
+  <Card title="PR2: GCP Vertex AI" icon="github">
+    Code for multi-model deployment on GCP Vertex AI with:
+    - Deployment scripts
+    - At least 2 different model types
+    - Testing scripts
+    - README with instructions
+  </Card>
+  
+  <Card title="Platform Comparison" icon="file-lines">
+    Google Doc or Markdown document with:
+    - Technical feature comparison
+    - Cost analysis for your workload
+    - Developer experience notes
+    - Recommendation with rationale
+  </Card>
+  
+  <Card title="MLOps Stack Templates" icon="diagram-project">
+    Two alternative MLOps stack designs:
+    - AWS SageMaker-based stack
+    - GCP Vertex AI-based stack
+    - Comparison with current implementation
+  </Card>
+</CardGroup>
+
+## Acceptance Criteria
+
+<AccordionGroup>
+  <Accordion title="Code Quality">
+    - ✅ Code follows project style guide (ruff format, ruff check)
+    - ✅ All tests pass (pytest)
+    - ✅ Clear README with setup instructions
+    - ✅ No hardcoded credentials or account IDs
+    - ✅ Proper error handling and logging
+  </Accordion>
+  
+  <Accordion title="Functionality">
+    - ✅ Multi-model endpoints successfully deployed
+    - ✅ At least 2 models per platform
+    - ✅ Inference working for all models
+    - ✅ Performance metrics collected
+    - ✅ Cleanup scripts provided
+  </Accordion>
+  
+  <Accordion title="Documentation">
+    - ✅ Platform comparison document complete
+    - ✅ Cost analysis with specific numbers
+    - ✅ Clear recommendation with rationale
+    - ✅ MLOps stack templates documented
+    - ✅ Pros and cons for each approach
+  </Accordion>
+</AccordionGroup>
+
+## Reading List
+
+Work through these resources to build understanding:
+
+### MLOps Platforms
+- [MLOps Platforms GitHub](https://github.com/thoughtworks/mlops-platforms)
+- [Machine Learning Tools Landscape v2](https://huyenchip.com/2020/12/30/mlops-v2.html)
+- [MLOps Landscape in 2024](https://neptune.ai/blog/mlops-tools-platforms-landscape)
+
+### AWS SageMaker
+- [What is Amazon SageMaker?](https://docs.aws.amazon.com/sagemaker/latest/dg/whatis.html)
+- [Train machine learning models](https://docs.aws.amazon.com/sagemaker/latest/dg/train-model.html)
+- [Deploy models for inference](https://docs.aws.amazon.com/sagemaker/latest/dg/deploy-model.html)
+- [Multi-Model Endpoints](https://docs.aws.amazon.com/sagemaker/latest/dg/multi-model-endpoints.html)
+- [Create a Multi-Model Endpoint](https://docs.aws.amazon.com/sagemaker/latest/dg/create-multi-model-endpoint.html)
+- [Multi-Model Endpoints on GPU](https://aws.amazon.com/blogs/machine-learning/run-multiple-deep-learning-models-on-gpu-with-amazon-sagemaker-multi-model-endpoints/)
+- [SageMaker Model Monitor](https://docs.aws.amazon.com/sagemaker/latest/dg/model-monitor.html)
+- [Amazon Bedrock](https://aws.amazon.com/bedrock/)
+- [SageMaker + Hugging Face](https://huggingface.co/blog/the-partnership-amazon-sagemaker-and-hugging-face)
+
+### GCP Vertex AI
+- [Giving Vertex AI a Spin](https://towardsdatascience.com/giving-vertex-ai-the-new-unified-ml-platform-on-google-cloud-a-spin-35e0f3852f25)
+- [Vertex Pipelines AutoML Workflow](https://cloud.google.com/blog/topics/developers-practitioners/use-vertex-pipelines-build-automl-classification-end-end-workflow)
+- [Vertex AI Samples](https://github.com/GoogleCloudPlatform/vertex-ai-samples)
+- [Serving with NVIDIA Triton](https://cloud.google.com/vertex-ai/docs/predictions/using-nvidia-triton)
+- [Vertex AI Model Monitoring](https://colab.research.google.com/github/GoogleCloudPlatform/vertex-ai-samples/blob/master/notebooks/official/model_monitoring/model_monitoring.ipynb)
+- [Monitor feature skew and drift](https://cloud.google.com/vertex-ai/docs/model-monitoring/using-model-monitoring)
+- [Machine Learning Engineer Learning Path](https://www.cloudskillsboost.google/paths/17)
+
+### Azure ML
+- [Azure AI Reference Architectures](https://github.com/microsoft/AI)
+
+## Tips for Success
+
+<Warning>
+**Cost Management:**
+- Use the smallest instance types for testing
+- Delete endpoints when not in use
+- Set up billing alerts
+- Use free tier where possible
+- Clean up resources after testing
+</Warning>
+
+<Tip>
+**Development Workflow:**
+1. Start with SageMaker (better multi-model support)
+2. Use the provided CLI tool as a starting point
+3. Test with simple models first (faster iteration)
+4. Document everything as you go
+5. Take screenshots of monitoring dashboards
+6. Track all costs for comparison
+</Tip>
+
+<Info>
+**Common Issues:**
+- IAM permissions: Ensure your role has S3, SageMaker access
+- Model format: Follow Triton model repository structure
+- Cold starts: First request will be slow (expected)
+- Region consistency: Keep all resources in same region
+</Info>
+
+## Keep Iterating!
+
+After completing this module, continue exploring:
+
+- Azure Machine Learning for third platform perspective
+- Kubernetes-based alternatives (KServe, Seldon)
+- Model serving optimizations (TensorRT, ONNX)
+- A/B testing and canary deployments
+- Cost optimization techniques
+- Multi-cloud strategies
+
+<Card title="Continue Learning" icon="rocket" href="/modules">
+  Explore other modules in the ML in Production course
+</Card>

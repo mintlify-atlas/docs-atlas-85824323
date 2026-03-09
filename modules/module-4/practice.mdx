@@ -1,0 +1,452 @@
+---
+title: "Practice Exercises"
+description: "Hands-on exercises for building ML pipelines with Airflow, Kubeflow, and Dagster"
+---
+
+# Practice Exercises
+
+Complete these hands-on exercises to build end-to-end training and inference pipelines using all three orchestration frameworks.
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes Cluster" icon="cube">
+    ```bash
+    kind create cluster --name ml-in-production
+    ```
+  </Card>
+  
+  <Card title="Environment Variables" icon="key">
+    ```bash
+    export WANDB_PROJECT=your-project
+    export WANDB_API_KEY=your-api-key
+    ```
+  </Card>
+</CardGroup>
+
+## Homework 7: Kubeflow + Airflow Pipelines
+
+### Learning Objectives
+
+- Deploy Kubeflow Pipelines on Kubernetes
+- Write training and inference DAGs for Kubeflow
+- Deploy Airflow with KubernetesPodOperator
+- Implement parallel training/inference pipelines
+
+### Reading List
+
+<CardGroup cols={2}>
+  <Card title="Kubeflow Deployment" icon="book" href="https://www.kubeflow.org/docs/components/pipelines/v1/installation/standalone-deployment/">
+    Standalone deployment guide
+  </Card>
+  
+  <Card title="KFP SDK Reference" icon="code" href="https://kubeflow-pipelines.readthedocs.io/">
+    API documentation
+  </Card>
+  
+  <Card title="KubernetesPodOperator" icon="book" href="https://airflow.apache.org/docs/apache-airflow-providers-cncf-kubernetes/stable/operators.html">
+    Airflow Kubernetes integration
+  </Card>
+  
+  <Card title="Pipeline Design Pattern" icon="book" href="https://doordash.engineering/2021/07/07/pipeline-design-pattern-recommendation/">
+    DoorDash's modular approach
+  </Card>
+</CardGroup>
+
+### Task Requirements
+
+Both training and inference pipelines must include **at minimum**:
+
+<Tabs>
+  <Tab title="Training Pipeline">
+    **Required Steps:**
+    1. Load Training Data
+    2. Train Model
+    3. Save Trained Models
+    
+    **Optional Steps:**
+    - Data preprocessing/augmentation
+    - Hyperparameter tuning
+    - Model evaluation on validation set
+    - Upload metrics to experiment tracker
+    
+    **Deliverables:**
+    - Trained model artifacts
+    - Training metrics logged to W&B
+    - Pipeline execution completes successfully
+  </Tab>
+  
+  <Tab title="Inference Pipeline">
+    **Required Steps:**
+    1. Load Data for Inference
+    2. Load Trained Model
+    3. Run Inference
+    4. Save Inference Results
+    
+    **Optional Steps:**
+    - Batch processing
+    - Post-processing predictions
+    - Calculate evaluation metrics
+    - Alert on prediction anomalies
+    
+    **Deliverables:**
+    - Predictions saved (CSV, JSON, etc.)
+    - Inference metrics logged
+    - Pipeline handles errors gracefully
+  </Tab>
+</Tabs>
+
+### Assignments
+
+<Steps>
+  <Step title="PR1: Kubeflow Deployment README">
+    Write a README with instructions on:
+    - Installing Kubeflow Pipelines on Kind cluster
+    - Accessing the UI via port-forward
+    - Configuring the Python SDK
+    - Verifying installation
+    
+    **Acceptance Criteria:**
+    - README is clear and reproducible
+    - Includes troubleshooting common issues
+    - Tested on a fresh cluster
+  </Step>
+  
+  <Step title="PR2: Kubeflow Training Pipeline">
+    Implement a Kubeflow training pipeline:
+    - Use `@dsl.component` decorator
+    - Define typed Input/Output artifacts
+    - Upload model to W&B registry
+    
+    **Acceptance Criteria:**
+    - Pipeline compiles without errors
+    - Runs successfully in Kubeflow UI
+    - Produces trained model artifact
+    - Training metrics logged
+  </Step>
+  
+  <Step title="PR3: Kubeflow Inference Pipeline">
+    Implement a Kubeflow inference pipeline:
+    - Load model from W&B registry
+    - Run predictions on test data
+    - Save results as Dataset artifact
+    
+    **Acceptance Criteria:**
+    - Pipeline depends on training pipeline outputs
+    - Artifact lineage visible in UI
+    - Predictions saved correctly
+  </Step>
+  
+  <Step title="PR4: Airflow Deployment README">
+    Write a README covering:
+    - Installing Airflow with Kubernetes provider
+    - Creating PersistentVolumes for data sharing
+    - Launching Airflow standalone
+    - Accessing the web UI
+    
+    **Acceptance Criteria:**
+    - Instructions work on macOS and Linux
+    - Explains AIRFLOW_HOME setup
+    - Documents common errors
+  </Step>
+  
+  <Step title="PR5: Airflow Training DAG">
+    Implement an Airflow training DAG:
+    - Use KubernetesPodOperator for tasks
+    - Mount PersistentVolumes for data sharing
+    - Clean up storage before/after runs
+    
+    **Acceptance Criteria:**
+    - DAG appears in Airflow UI
+    - Triggers successfully via CLI or UI
+    - Model uploaded to registry
+    - Tasks run in correct sequence
+  </Step>
+  
+  <Step title="PR6: Airflow Inference DAG">
+    Implement an Airflow inference DAG:
+    - Load data and model in parallel
+    - Run inference after both complete
+    - Schedule daily at 9 AM UTC
+    
+    **Acceptance Criteria:**
+    - Parallel task execution works
+    - Schedule triggers automatically
+    - Predictions saved to storage
+  </Step>
+</Steps>
+
+### Success Criteria
+
+- **6 PRs merged** with passing reviews
+- All pipelines run end-to-end without errors
+- Model training completes and uploads to registry
+- Inference generates predictions using trained models
+
+## Homework 8: Dagster
+
+### Learning Objectives
+
+- Implement asset-centric pipelines in Dagster
+- Add data quality checks with asset checks
+- Compare orchestration frameworks
+- Document tradeoffs in design decisions
+
+### Reading List
+
+<CardGroup cols={2}>
+  <Card title="Dagster ML Pipelines" icon="book" href="https://dagster.io/blog/dagster-ml-pipelines">
+    Orchestrating ML workflows
+  </Card>
+  
+  <Card title="Fine-tuning LLMs" icon="book" href="https://dagster.io/blog/finetuning-llms">
+    ML pipelines for LLM training
+  </Card>
+  
+  <Card title="Metaflow" icon="book" href="https://metaflow.org/">
+    Alternative framework overview
+  </Card>
+  
+  <Card title="Flyte" icon="book" href="https://flyte.org/machine-learning">
+    Another orchestration option
+  </Card>
+</CardGroup>
+
+### Task Requirements
+
+<Tabs>
+  <Tab title="Training Pipeline">
+    **Required Assets:**
+    1. `load_training_data` - Load and preprocess data
+    2. `trained_model` - Train model, return model artifact
+    3. `model_metrics` - Evaluate model on validation set
+    
+    **Required Checks:**
+    - Data is not empty
+    - Model accuracy/metrics exceed threshold
+    - Training completed without errors
+    
+    **Deliverables:**
+    - All assets materialize successfully
+    - Asset checks pass (or fail with explanations)
+    - Metadata visible in Dagster UI
+  </Tab>
+  
+  <Tab title="Inference Pipeline">
+    **Required Assets:**
+    1. `load_inference_data` - Load data for predictions
+    2. `load_trained_model` - Fetch model from registry
+    3. `predictions` - Run inference, return results
+    4. `inference_metrics` - Calculate prediction statistics
+    
+    **Required Checks:**
+    - Inference data not empty
+    - Model loaded successfully
+    - Predictions within expected ranges
+    
+    **Deliverables:**
+    - Predictions saved to file/database
+    - Inference metrics logged
+    - Asset lineage shows dependencies
+  </Tab>
+</Tabs>
+
+### Assignments
+
+<Steps>
+  <Step title="Update Design Document">
+    Add a **Pipeline Orchestration** section to your Google Doc comparing:
+    
+    **For Each Framework:**
+    - Why did you choose this framework?
+    - What are the advantages for your use case?
+    - What are the limitations?
+    - How does it handle failures?
+    - What's the learning curve?
+    
+    **Comparison Table:**
+    Create a table comparing Airflow, Kubeflow, and Dagster on:
+    - Ease of use
+    - Kubernetes integration
+    - Artifact tracking
+    - Data quality checks
+    - Community support
+    - Production readiness
+    
+    **Recommendation:**
+    Which framework would you choose for production and why?
+  </Step>
+  
+  <Step title="PR1: Dagster Training Pipeline">
+    Implement Dagster assets for training:
+    - Use `@asset` decorator
+    - Add `@asset_check` for validation
+    - Attach metadata with `context.add_output_metadata()`
+    - Optionally use Modal for GPU execution
+    
+    **Acceptance Criteria:**
+    - Assets materialize in Dagster UI
+    - Asset checks run and report status
+    - Metadata includes samples, metrics, counts
+    - Model uploaded to registry
+  </Step>
+  
+  <Step title="PR2: Dagster Inference Pipeline">
+    Implement Dagster assets for inference:
+    - Depend on trained model asset
+    - Load model from registry
+    - Run batch predictions
+    - Add checks for prediction quality
+    
+    **Acceptance Criteria:**
+    - Asset lineage shows training → inference flow
+    - Predictions saved successfully
+    - Asset checks validate output
+    - Inference metrics logged
+  </Step>
+</Steps>
+
+### Success Criteria
+
+- **2 PRs merged** with passing reviews
+- **Pipeline section** in design document
+- All assets materialize without errors
+- Asset checks provide useful validation
+- Clear recommendation for production use
+
+## Bonus Challenges
+
+<AccordionGroup>
+  <Accordion title="Multi-Model Comparison">
+    Extend pipelines to train multiple models in parallel:
+    - Train 3+ models with different hyperparameters
+    - Compare metrics in W&B
+    - Select best model for inference
+    - Implement A/B testing in inference pipeline
+  </Accordion>
+  
+  <Accordion title="Advanced Scheduling">
+    Implement complex scheduling logic:
+    - Retrain model weekly
+    - Run inference hourly
+    - Trigger retraining if inference drift detected
+    - Send Slack notifications on failures
+  </Accordion>
+  
+  <Accordion title="Cost Optimization">
+    Reduce training costs:
+    - Use spot instances for training
+    - Implement early stopping
+    - Cache intermediate results
+    - Compare costs across orchestrators
+    - Document savings (aim for 50%+ reduction)
+    
+    Reference: [How we Reduced ML Training Costs by 78%](https://blog.gofynd.com/how-we-reduced-our-ml-training-costs-by-78-a33805cb00cf)
+  </Accordion>
+  
+  <Accordion title="Data Versioning">
+    Add data versioning and lineage:
+    - Use DVC or Pachyderm for data versioning
+    - Track which data version trained each model
+    - Enable rollback to previous data/model versions
+    - Implement drift detection on training data
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+<CardGroup cols={3}>
+  <Card title="Why Data Scientists Shouldn't Know K8s" icon="newspaper" href="https://huyenchip.com/2021/09/13/data-science-infrastructure.html">
+    Chip Huyen's perspective
+  </Card>
+  
+  <Card title="MLOps Orchestration" icon="graduation-cap" href="https://madewithml.com/courses/mlops/orchestration/">
+    Made With ML course
+  </Card>
+  
+  <Card title="Awesome Workflow Engines" icon="list" href="https://github.com/meirwah/awesome-workflow-engines">
+    Comprehensive comparison
+  </Card>
+</CardGroup>
+
+## Tips for Success
+
+<Steps>
+  <Step title="Start Simple">
+    Begin with minimal pipelines (3-4 steps) before adding complexity.
+  </Step>
+  
+  <Step title="Test Locally First">
+    Run components locally before deploying to Kubernetes.
+  </Step>
+  
+  <Step title="Use Version Control">
+    Commit pipeline code frequently with clear messages.
+  </Step>
+  
+  <Step title="Document Everything">
+    Write READMEs as you go, not at the end.
+  </Step>
+  
+  <Step title="Compare Thoughtfully">
+    In your design doc, provide specific examples rather than generic statements.
+  </Step>
+</Steps>
+
+## Getting Help
+
+If you're stuck:
+
+1. Check the framework's documentation
+2. Search GitHub issues for similar problems
+3. Review example DAGs/pipelines in this module
+4. Ask in course discussion forums
+5. Consult with your peers
+
+<Note>
+  Remember: The goal is learning, not perfection. It's okay if your first pipelines are messy—refactor as you learn!
+</Note>
+
+## Submission Checklist
+
+<AccordionGroup>
+  <Accordion title="Homework 7 Checklist">
+    - [ ] PR1: Kubeflow deployment README
+    - [ ] PR2: Kubeflow training pipeline code
+    - [ ] PR3: Kubeflow inference pipeline code
+    - [ ] PR4: Airflow deployment README
+    - [ ] PR5: Airflow training DAG
+    - [ ] PR6: Airflow inference DAG
+    - [ ] All PRs have passing CI checks
+    - [ ] All pipelines run successfully
+    - [ ] Models uploaded to W&B registry
+    - [ ] Screenshots of UI showing successful runs
+  </Accordion>
+  
+  <Accordion title="Homework 8 Checklist">
+    - [ ] PR1: Dagster training pipeline
+    - [ ] PR2: Dagster inference pipeline
+    - [ ] Design doc pipeline section completed
+    - [ ] Comparison table filled out
+    - [ ] Recommendation documented
+    - [ ] All asset checks implemented
+    - [ ] Metadata attached to assets
+    - [ ] Asset lineage visible in UI
+  </Accordion>
+</AccordionGroup>
+
+## What's Next?
+
+After completing these exercises, you'll be ready to:
+
+- Deploy production ML pipelines
+- Choose appropriate orchestration tools for projects
+- Implement data quality checks and monitoring
+- Scale ML workflows on Kubernetes
+- Compare and evaluate orchestration frameworks
+
+<Card title="Continue to Module 5" icon="arrow-right" href="/modules/module-5/overview">
+  Move on to the next module
+</Card>

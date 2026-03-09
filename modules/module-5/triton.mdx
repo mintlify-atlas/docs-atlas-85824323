@@ -1,0 +1,524 @@
+---
+title: "Triton Inference Server"
+description: "Deploy high-performance model serving with NVIDIA Triton"
+---
+
+## Overview
+
+NVIDIA Triton Inference Server provides a production-grade solution for deploying ML models with advanced features like dynamic batching, model ensembles, and multi-framework support.
+
+This module uses **PyTriton**, a Python-first wrapper that simplifies Triton deployment while maintaining high performance.
+
+## PyTriton Implementation
+
+### Server Setup
+
+The PyTriton server (`serving/pytriton_serving.py`) wraps the predictor:
+
+```python serving/pytriton_serving.py
+import numpy as np
+from pytriton.decorators import batch
+from pytriton.model_config import ModelConfig, Tensor
+from pytriton.triton import Triton
+from serving.predictor import Predictor
+
+logger = logging.getLogger("server")
+predictor = Predictor.default_from_model_registry()
+
+@batch
+def _infer_fn(text: np.ndarray):
+    text = np.char.decode(text.astype("bytes"), "utf-8")
+    text = text.tolist()[0]
+    
+    logger.info(f"sequence = {text}")
+    results = predictor.predict(text=text)
+    logger.info(f"results = {results}")
+    return [results]
+
+def main():
+    with Triton() as triton:
+        logger.info("Loading models.")
+        triton.bind(
+            model_name="predictor_a",
+            infer_func=_infer_fn,
+            inputs=[
+                Tensor(name="text", dtype=bytes, shape=(-1,)),
+            ],
+            outputs=[
+                Tensor(name="probs", dtype=np.float32, shape=(-1,)),
+            ],
+            config=ModelConfig(max_batch_size=4),
+        )
+        logger.info("Serving inference")
+        triton.serve()
+```
+
+**Key components:**
+- `@batch`: Decorator for automatic batching
+- `ModelConfig`: Configures batching behavior (max size: 4)
+- `Tensor`: Defines input/output schema
+- `triton.bind()`: Registers model with inference function
+
+## Model Configuration
+
+### Input Specification
+
+```python
+inputs=[
+    Tensor(name="text", dtype=bytes, shape=(-1,)),
+]
+```
+
+**Parameters:**
+- `name`: Input identifier for client requests
+- `dtype`: `bytes` for string data
+- `shape`: `(-1,)` allows variable-length sequences
+
+### Output Specification
+
+```python
+outputs=[
+    Tensor(name="probs", dtype=np.float32, shape=(-1,)),
+]
+```
+
+**Returns:**
+- Flattened probability array
+- `np.float32` for efficiency
+- Dynamic shape based on batch size
+
+### Batching Configuration
+
+```python
+config=ModelConfig(max_batch_size=4)
+```
+
+**Benefits:**
+- Triton automatically batches requests
+- Up to 4 requests processed together
+- Improves GPU utilization
+- Reduces inference latency
+
+<Info>
+Dynamic batching groups requests within a time window. Tune `max_batch_size` based on your throughput requirements.
+</Info>
+
+## Inference Function
+
+### Data Processing
+
+```python
+@batch
+def _infer_fn(text: np.ndarray):
+    # Decode bytes to UTF-8 strings
+    text = np.char.decode(text.astype("bytes"), "utf-8")
+    text = text.tolist()[0]
+    
+    # Run prediction
+    results = predictor.predict(text=text)
+    return [results]
+```
+
+**Pipeline:**
+1. Receive batched byte arrays from Triton
+2. Decode to UTF-8 strings
+3. Convert to Python list
+4. Pass to predictor
+5. Return NumPy array
+
+### Logging
+
+```python
+logger.info(f"sequence = {text}")
+logger.info(f"results = {results}")
+```
+
+Logging helps with:
+- Request debugging
+- Performance monitoring
+- Model behavior analysis
+
+## Client Implementation
+
+### HTTP Client
+
+The PyTriton client (`serving/pytriton_client.py`) uses HTTP protocol:
+
+```python serving/pytriton_client.py
+import numpy as np
+from pytriton.client import ModelClient
+
+def main():
+    client = ModelClient("localhost:8000", "predictor_a")
+    
+    input_data = np.array(["good", "bad"])
+    result_dict = client.infer_batch(text=input_data)
+    
+    print(f"Input: {input_data}")
+    print(f"Output: {result_dict['probs']}")
+```
+
+**Client features:**
+- Automatic serialization/deserialization
+- Built-in retry logic
+- Connection pooling
+- Batch inference support
+
+### Request Format
+
+```python
+input_data = np.array(["good", "bad"])
+result = client.infer_batch(text=input_data)
+```
+
+**Response format:**
+```python
+{
+    'probs': array([[0.23, 0.77], [0.89, 0.11]], dtype=float32)
+}
+```
+
+## Local Deployment
+
+### Using Make
+
+```bash
+make run_pytriton
+```
+
+This:
+1. Builds Docker image with PyTriton dependencies
+2. Exposes three ports:
+   - `8000`: HTTP inference
+   - `8001`: gRPC inference
+   - `8002`: Metrics
+3. Mounts W&B credentials
+
+### Using Docker
+
+```bash
+# Build
+docker build -f Dockerfile \
+  -t app-pytriton:latest \
+  --target app-pytriton .
+
+# Run
+docker run -it \
+  -p 8001:8001 \
+  -p 8000:8000 \
+  -p 8002:8002 \
+  -e WANDB_API_KEY=${WANDB_API_KEY} \
+  app-pytriton:latest
+```
+
+### Testing
+
+```bash
+# Install client
+pip install nvidia-pytriton[client]
+
+# Run client
+python serving/pytriton_client.py
+```
+
+**Expected output:**
+```
+Input: ['good' 'bad']
+Output: [[0.23 0.77]
+         [0.89 0.11]]
+```
+
+## Kubernetes Deployment
+
+### Manifest Example
+
+```yaml k8s/app-triton.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-triton
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-triton
+  template:
+    metadata:
+      labels:
+        app: app-triton
+    spec:
+      containers:
+        - name: app-triton
+          image: ghcr.io/kyryl-opens-ml/app-pytriton:latest
+          ports:
+            - containerPort: 8000
+              name: http
+            - containerPort: 8001
+              name: grpc
+            - containerPort: 8002
+              name: metrics
+          env:
+          - name: WANDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: wandb
+                key: WANDB_API_KEY
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-triton
+spec:
+  ports:
+  - port: 8000
+    name: http
+  - port: 8001
+    name: grpc
+  - port: 8002
+    name: metrics
+  selector:
+    app: app-triton
+```
+
+**Configuration notes:**
+- GPU resource requests for acceleration
+- Multiple service ports for protocols
+- Metrics port for Prometheus
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Deploy to cluster">
+    ```bash
+    kubectl create -f k8s/app-triton.yaml
+    ```
+  </Step>
+  
+  <Step title="Verify GPU allocation">
+    ```bash
+    kubectl describe pod -l app=app-triton | grep -A 5 Limits
+    ```
+  </Step>
+  
+  <Step title="Monitor logs">
+    ```bash
+    kubectl logs -l app=app-triton -f
+    ```
+  </Step>
+  
+  <Step title="Port forward for testing">
+    ```bash
+    kubectl port-forward svc/app-triton 8000:8000
+    ```
+  </Step>
+</Steps>
+
+## Performance Features
+
+### Dynamic Batching
+
+<AccordionGroup>
+  <Accordion title="How it works">
+    Triton waits for requests to arrive and batches them together before inference:
+    
+    ```
+    Request 1 (t=0ms) --->
+    Request 2 (t=2ms) ---> [Batch] --> Inference
+    Request 3 (t=4ms) --->
+    ```
+    
+    **Configuration:**
+    ```python
+    config=ModelConfig(
+        max_batch_size=4,
+        batching=True,
+        max_queue_delay_microseconds=100
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="Tuning parameters">
+    - `max_batch_size`: Maximum requests per batch (higher = more throughput)
+    - `max_queue_delay_microseconds`: Wait time for batch formation (higher = larger batches, more latency)
+    - `preferred_batch_size`: Target batch size (e.g., [4, 8] for powers of 2)
+  </Accordion>
+</AccordionGroup>
+
+### Concurrent Model Execution
+
+Triton can run multiple model instances:
+
+```python
+config=ModelConfig(
+    max_batch_size=4,
+    instance_group=[
+        {"count": 2, "kind": "KIND_GPU"}
+    ]
+)
+```
+
+This creates 2 model instances on GPU for parallel execution.
+
+## Monitoring and Metrics
+
+### Prometheus Metrics
+
+Triton exposes metrics on port 8002:
+
+```bash
+curl http://localhost:8002/metrics
+```
+
+**Key metrics:**
+- `nv_inference_request_success`: Successful requests
+- `nv_inference_request_failure`: Failed requests
+- `nv_inference_queue_duration_us`: Time in queue
+- `nv_inference_compute_duration_us`: Inference time
+- `nv_inference_exec_count`: Execution count
+
+### Grafana Dashboard
+
+Example Prometheus query:
+
+```promql
+# Request rate
+rate(nv_inference_request_success{model="predictor_a"}[5m])
+
+# Average latency
+rate(nv_inference_compute_duration_us[5m]) / rate(nv_inference_exec_count[5m])
+```
+
+## Advanced Features
+
+### Model Ensembles
+
+Chain multiple models:
+
+```python
+triton.bind(
+    model_name="preprocessor",
+    infer_func=preprocess_fn,
+    inputs=[Tensor(name="raw_text", dtype=bytes, shape=(-1,))],
+    outputs=[Tensor(name="tokens", dtype=np.int32, shape=(-1,))]
+)
+
+triton.bind(
+    model_name="classifier",
+    infer_func=classify_fn,
+    inputs=[Tensor(name="tokens", dtype=np.int32, shape=(-1,))],
+    outputs=[Tensor(name="probs", dtype=np.float32, shape=(-1,))]
+)
+```
+
+### Model Versioning
+
+```python
+triton.bind(
+    model_name="predictor_a",
+    model_version="1",
+    infer_func=_infer_fn_v1,
+    # ...
+)
+
+triton.bind(
+    model_name="predictor_a",
+    model_version="2",
+    infer_func=_infer_fn_v2,
+    # ...
+)
+```
+
+Clients can request specific versions:
+
+```python
+client = ModelClient("localhost:8000", "predictor_a", model_version="1")
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Model loading fails">
+    **Problem:** Model doesn't appear in `triton.list_models()`
+    
+    **Solutions:**
+    - Check W&B credentials are set
+    - Verify model path exists: `/tmp/model`
+    - Check logs for download errors
+    - Ensure sufficient disk space
+  </Accordion>
+  
+  <Accordion title="Shape mismatch errors">
+    **Problem:** `Input tensor shape mismatch`
+    
+    **Solutions:**
+    - Verify input shape matches tensor spec
+    - Check batch dimension is first axis
+    - Ensure dtype matches (bytes vs strings)
+  </Accordion>
+  
+  <Accordion title="Low throughput">
+    **Problem:** Not utilizing GPU effectively
+    
+    **Solutions:**
+    - Increase `max_batch_size`
+    - Tune `max_queue_delay_microseconds`
+    - Add more model instances
+    - Check GPU memory usage
+  </Accordion>
+</AccordionGroup>
+
+## Comparison: PyTriton vs Native Triton
+
+| Feature | PyTriton | Native Triton |
+|---------|----------|---------------|
+| Setup complexity | Low | High |
+| Python integration | Excellent | Limited |
+| Performance | Very good | Excellent |
+| Model repository | Not needed | Required |
+| Custom backends | Easy | Complex |
+| Multi-framework | Via Python | Native |
+
+**Use PyTriton when:**
+- Rapid prototyping
+- Python-heavy preprocessing
+- Simple deployment requirements
+
+**Use Native Triton when:**
+- Maximum performance needed
+- Complex model ensembles
+- Multi-framework serving (TensorRT + ONNX + PyTorch)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Batching" icon="layer-group">
+    Tune batch size based on GPU memory and latency requirements
+  </Card>
+  <Card title="Logging" icon="file-lines">
+    Log inputs/outputs for debugging and monitoring
+  </Card>
+  <Card title="Health Checks" icon="heart-pulse">
+    Implement custom health endpoints for Kubernetes
+  </Card>
+  <Card title="Metrics" icon="chart-line">
+    Monitor queue times and compute duration
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="KServe Deployment" icon="cloud" href="/modules/module-5/kserve">
+  Deploy cloud-native inference with KServe
+</Card>
+
+## Resources
+
+- [PyTriton Documentation](https://triton-inference-server.github.io/pytriton/)
+- [Triton Inference Server](https://github.com/triton-inference-server/server)
+- [Model Configuration](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md)
+- [Performance Tuning](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/optimization.md)

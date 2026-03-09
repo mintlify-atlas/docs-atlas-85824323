@@ -1,0 +1,496 @@
+---
+title: "Kubernetes Deployment"
+description: "Deploy and orchestrate containerized ML workloads with Kubernetes"
+---
+
+## Introduction
+
+Kubernetes (K8s) is an open-source container orchestration platform that automates deployment, scaling, and management of containerized applications. It's essential for running ML systems at scale.
+
+<Note>
+Kubernetes might be overkill for small teams or pet projects. See [Serverless Alternatives](/modules/module-1/serverless) for simpler deployment options.
+</Note>
+
+## Local Setup
+
+### Install Required Tools
+
+<Steps>
+  <Step title="Install kind">
+    [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) runs local K8s clusters for development:
+    
+    ```bash
+    brew install kind
+    ```
+  </Step>
+  
+  <Step title="Create Cluster">
+    Launch a local Kubernetes cluster:
+    
+    ```bash
+    kind create cluster --name ml-in-production
+    ```
+  </Step>
+  
+  <Step title="Install kubectl">
+    The Kubernetes command-line tool:
+    
+    ```bash
+    brew install kubectl
+    ```
+  </Step>
+  
+  <Step title="Verify Context">
+    Check that kubectl is pointing to your cluster:
+    
+    ```bash
+    kubectl config get-contexts
+    ```
+  </Step>
+</Steps>
+
+### Optional: k9s Dashboard
+
+[k9s](https://k9scli.io/) provides a terminal-based UI for managing Kubernetes clusters—think of it as "htop for Kubernetes":
+
+```bash
+# Install
+brew install derailed/k9s/k9s
+
+# Run
+k9s -A
+```
+
+<Note>
+k9s is invaluable for debugging. You can view logs, exec into pods, delete resources, and monitor resource usage—all from a single interface.
+</Note>
+
+## Kubernetes Resources
+
+Kubernetes uses YAML manifests to define desired state. Let's explore the key resource types for ML workloads.
+
+### Pods
+
+A Pod is the smallest deployable unit—it wraps one or more containers.
+
+<CodeGroup>
+
+```yaml pod-app-web.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-app-web
+spec:
+  containers:
+    - image: ghcr.io/kyryl-opens-ml/app-web:latest
+      name: pod-app-web
+```
+
+```yaml pod-app-ml.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-app-ml
+spec:
+  containers:
+    - image: ghcr.io/kyryl-opens-ml/app-ml:latest
+      name: pod-app-ml
+  restartPolicy: Never
+```
+
+</CodeGroup>
+
+**Deploy Pods:**
+
+<Tabs>
+  <Tab title="Web Pod">
+    ```bash
+    kubectl create -f k8s-resources/pod-app-web.yaml
+    ```
+  </Tab>
+  <Tab title="ML Pod">
+    ```bash
+    kubectl create -f k8s-resources/pod-app-ml.yaml
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+Pods are ephemeral and don't self-heal. For production workloads, use Deployments instead.
+</Warning>
+
+### Jobs
+
+Jobs run containers to completion—perfect for batch ML training tasks.
+
+<CodeGroup>
+
+```yaml job-app-ml.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-app-ml
+spec:
+  parallelism: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - image: ghcr.io/kyryl-opens-ml/app-ml:latest
+          name: job-app-ml
+```
+
+</CodeGroup>
+
+**Deploy Job:**
+
+```bash
+kubectl create -f k8s-resources/job-app-ml.yaml
+```
+
+**Key features:**
+
+- `parallelism: 2` runs 2 pods simultaneously for parallel training
+- `restartPolicy: Never` prevents restarts on failure
+- Automatically tracks completion status
+
+<Note>
+Jobs are ideal for ML training workflows, data processing pipelines, and one-off tasks. Use CronJobs for scheduled training runs.
+</Note>
+
+### Deployments and Services
+
+Deployments manage replica sets and enable rolling updates. Services provide stable networking.
+
+<CodeGroup>
+
+```yaml deployment-app-web.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployments-app-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: deployments-app-web
+  template:
+    metadata:
+      labels:
+        app: deployments-app-web
+    spec:
+      containers:
+        - name: app-web
+          image: ghcr.io/kyryl-opens-ml/app-web:latest 
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deployments-app-web
+  labels:
+    app: deployments-app-web
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    app: deployments-app-web
+```
+
+</CodeGroup>
+
+**Deploy:**
+
+```bash
+kubectl create -f k8s-resources/deployment-app-web.yaml
+```
+
+**Access the service:**
+
+```bash
+kubectl port-forward svc/deployments-app-web 8080:8080
+```
+
+Then visit `http://localhost:8080` in your browser.
+
+### Deployment Features
+
+- **Replicas**: `replicas: 2` runs 2 identical pods for high availability
+- **Rolling updates**: Update images without downtime
+- **Self-healing**: Automatically restarts failed pods
+- **Scaling**: Easily scale up/down with `kubectl scale`
+
+<Note>
+Services provide stable DNS names and load balancing across pod replicas. The selector matches pods by labels.
+</Note>
+
+## Common Operations
+
+### Viewing Resources
+
+```bash
+# List all pods
+kubectl get pods
+
+# List pods across all namespaces
+kubectl get pods -A
+
+# List deployments
+kubectl get deployments
+
+# List services
+kubectl get services
+
+# Get detailed info
+kubectl describe pod pod-app-web
+```
+
+### Logs and Debugging
+
+<Tabs>
+  <Tab title="View Logs">
+    ```bash
+    # Stream logs from a pod
+    kubectl logs -f pod-app-ml
+    
+    # Logs from specific container in pod
+    kubectl logs pod-name -c container-name
+    
+    # Previous container logs (if crashed)
+    kubectl logs pod-name --previous
+    ```
+  </Tab>
+  
+  <Tab title="Execute Commands">
+    ```bash
+    # Run shell in pod
+    kubectl exec -it pod-app-web -- /bin/bash
+    
+    # Run single command
+    kubectl exec pod-app-web -- ls /app
+    ```
+  </Tab>
+  
+  <Tab title="Port Forwarding">
+    ```bash
+    # Forward local port to pod
+    kubectl port-forward pod/pod-app-web 8080:8080
+    
+    # Forward to service
+    kubectl port-forward svc/deployments-app-web 8080:8080
+    ```
+  </Tab>
+</Tabs>
+
+### Scaling
+
+```bash
+# Scale deployment
+kubectl scale deployment deployments-app-web --replicas=5
+
+# Autoscale based on CPU
+kubectl autoscale deployment deployments-app-web --min=2 --max=10 --cpu-percent=80
+```
+
+### Updates
+
+```bash
+# Update image
+kubectl set image deployment/deployments-app-web app-web=ghcr.io/kyryl-opens-ml/app-web:v2
+
+# Check rollout status
+kubectl rollout status deployment/deployments-app-web
+
+# Rollback
+kubectl rollout undo deployment/deployments-app-web
+```
+
+### Cleanup
+
+```bash
+# Delete specific resource
+kubectl delete pod pod-app-ml
+kubectl delete deployment deployments-app-web
+
+# Delete from file
+kubectl delete -f k8s-resources/deployment-app-web.yaml
+
+# Delete all resources in namespace
+kubectl delete all --all
+```
+
+## Resource Configuration
+
+### Resource Requests and Limits
+
+For production ML workloads, always specify resource requirements:
+
+```yaml
+spec:
+  containers:
+    - name: app-ml
+      image: ghcr.io/kyryl-opens-ml/app-ml:latest
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "2000m"
+```
+
+- **Requests**: Guaranteed resources for scheduling
+- **Limits**: Maximum resources the container can use
+
+<Warning>
+Without resource limits, a single runaway ML job can consume all cluster resources and crash other workloads.
+</Warning>
+
+### GPU Support
+
+For GPU-accelerated training:
+
+```yaml
+resources:
+  limits:
+    nvidia.com/gpu: 1
+```
+
+## Kubernetes for ML Patterns
+
+### Training Jobs
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-training
+spec:
+  template:
+    spec:
+      containers:
+      - name: trainer
+        image: your-registry/ml-trainer:v1
+        env:
+        - name: EXPERIMENT_NAME
+          value: "experiment-001"
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+      restartPolicy: Never
+  backoffLimit: 3
+```
+
+### Model Serving
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-server
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: server
+        image: your-registry/model-server:v1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+```
+
+## Managed Kubernetes Providers
+
+For production deployments, use managed Kubernetes services:
+
+| Provider | Service | Best For |
+|----------|---------|----------|
+| AWS | [EKS](https://aws.amazon.com/eks/) | AWS ecosystem integration |
+| Google Cloud | [GKE](https://cloud.google.com/kubernetes-engine) | Best-in-class K8s experience |
+| AWS | [Fargate/ECS](https://aws.amazon.com/fargate/) | Serverless containers |
+| Google Cloud | [Cloud Run](https://cloud.google.com/run) | Serverless K8s |
+
+<Note>
+Managed services handle control plane maintenance, upgrades, and scaling, letting you focus on applications rather than infrastructure.
+</Note>
+
+## Best Practices
+
+### Namespaces
+
+Organize resources with namespaces:
+
+```bash
+# Create namespace
+kubectl create namespace ml-training
+
+# Deploy to namespace
+kubectl create -f job.yaml -n ml-training
+
+# Set default namespace
+kubectl config set-context --current --namespace=ml-training
+```
+
+### Labels and Selectors
+
+Use labels for organization and selection:
+
+```yaml
+metadata:
+  labels:
+    app: model-trainer
+    version: v2
+    environment: production
+    team: ml-platform
+```
+
+### ConfigMaps and Secrets
+
+Externalize configuration:
+
+```bash
+# Create ConfigMap
+kubectl create configmap model-config --from-file=config.yaml
+
+# Create Secret
+kubectl create secret generic api-keys --from-literal=token=abc123
+```
+
+Mount in pods:
+
+```yaml
+volumes:
+- name: config
+  configMap:
+    name: model-config
+- name: secrets
+  secret:
+    secretName: api-keys
+```
+
+## Resources
+
+### Learning Materials
+
+- [Learn Kubernetes Basics](https://kubernetes.io/docs/tutorials/kubernetes-basics/) - Official tutorial
+- [Hello Minikube](https://kubernetes.io/docs/tutorials/hello-minikube/) - Quick start guide
+- [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/) - Local development
+- [Kubernetes in Action](https://www.manning.com/books/kubernetes-in-action) - Comprehensive book
+
+### Advanced Topics
+
+- [Scaling Kubernetes to 7,500 nodes](https://openai.com/research/scaling-kubernetes-to-7500-nodes) - OpenAI's experience
+- [Why data scientists shouldn't need to know Kubernetes](https://huyenchip.com/2021/09/13/data-science-infrastructure.html) - Platform engineering perspective
+
+## Next Steps
+
+Learn how to automate building and deploying these resources with [CI/CD pipelines](/modules/module-1/cicd).

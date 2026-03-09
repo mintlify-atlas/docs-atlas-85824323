@@ -1,0 +1,361 @@
+---
+title: "Production Patterns"
+description: "Buy vs build decisions, cloud platforms, and real-world ML system design"
+---
+
+## Buy vs Build
+
+The most important decision in ML infrastructure: **Should we build or buy?**
+
+<Info>
+Building gives you control and customization. Buying gives you speed and support. Neither is universally better.
+</Info>
+
+### Decision Framework
+
+**Build when:**
+- You have unique requirements (custom hardware, proprietary algorithms)
+- Cost at scale justifies engineering investment (>$500K/year cloud spend)
+- You have a strong ML platform team (5+ engineers)
+- Vendor lock-in is unacceptable
+
+**Buy when:**
+- Time-to-market is critical (startup, new product)
+- Small team (fewer than 5 engineers)
+- Standard use cases (image classification, NER, embeddings)
+- Need SLA and support
+
+### The Build vs Buy Spectrum
+
+```
+Full Build ←―――――――――――――――――――――――――→ Full Buy
+  K8s + OSS      Managed K8s       Platform Services     Pure SaaS
+(Kubeflow+MLflow) (EKS+SageMaker)   (Vertex AI)         (OpenAI API)
+```
+
+Most companies end up in the middle: managed infrastructure + open-source tools.
+
+<CardGroup cols={2}>
+  <Card title="Open Source Stack" icon="code-branch">
+    **Pro:** No vendor lock-in, full control
+    
+    **Con:** Requires deep expertise, ongoing maintenance
+    
+    **Example:** Self-hosted K8s, Kubeflow, MLflow, Prometheus
+  </Card>
+  <Card title="Managed Platform" icon="cloud">
+    **Pro:** Fast setup, integrated services, SLA
+    
+    **Con:** Vendor lock-in, less flexibility
+    
+    **Example:** AWS SageMaker, Google Vertex AI, Azure ML
+  </Card>
+  <Card title="Serverless" icon="bolt">
+    **Pro:** Zero ops, pay-per-use, scales to zero
+    
+    **Con:** Cold starts, vendor-specific APIs
+    
+    **Example:** Modal, Replicate, Banana, Baseten
+  </Card>
+  <Card title="API Services" icon="globe">
+    **Pro:** No infrastructure, state-of-the-art models
+    
+    **Con:** Expensive at scale, data privacy concerns
+    
+    **Example:** OpenAI, Anthropic, Cohere
+  </Card>
+</CardGroup>
+
+## Real-World Stack Examples
+
+### Startup (Seed Stage)
+
+**Goal:** Ship fast, minimize ops
+
+**Stack:**
+- **Compute:** Modal or Railway (serverless)
+- **Data:** Postgres (Supabase) + S3
+- **Experiments:** Weights & Biases
+- **Serving:** Modal.com or Replicate
+- **Monitoring:** Sentry + built-in metrics
+
+**Why:**
+- No Kubernetes complexity
+- Pay-per-use (cost scales with revenue)
+- Focus on product, not infrastructure
+
+<Note>
+Many successful companies stay on this stack for years. Don't over-engineer early.
+</Note>
+
+### Mid-Size Company (Series A-B)
+
+**Goal:** Control costs, improve reliability
+
+**Stack:**
+- **Infra:** Managed Kubernetes (EKS/GKE)
+- **Data:** S3 + Snowflake/BigQuery
+- **Experiments:** W&B + MLflow
+- **Pipelines:** Airflow (Astronomer)
+- **Serving:** FastAPI on K8s + KServe
+- **Monitoring:** Prometheus + Grafana + Datadog
+
+**Why:**
+- Managed services reduce ops burden
+- K8s for flexibility without full self-hosting
+- Mix of open-source and commercial tools
+
+### Large Enterprise
+
+**Goal:** Scale, compliance, multi-tenancy
+
+**Stack:**
+- **Infra:** Self-hosted K8s (on-prem or cloud)
+- **Data:** Data lake (Delta Lake) + feature store (Feast/Tecton)
+- **Experiments:** MLflow + custom platform
+- **Pipelines:** Airflow or Kubeflow
+- **Serving:** Custom inference framework + Triton
+- **Monitoring:** Prometheus + Grafana + Seldon
+
+**Why:**
+- Full control for compliance (HIPAA, GDPR)
+- Cost optimization at scale
+- Custom features (multi-tenancy, chargeback)
+
+## AWS Example
+
+A production ML system on AWS:
+
+**Components:**
+- **Data:** S3 for raw data, Athena for queries, RDS for metadata
+- **Processing:** SageMaker Processing Jobs (Spark/Pandas at scale)
+- **Training:** EC2 with GPUs + SageMaker Training Jobs
+- **Pipelines:** MWAA (Managed Airflow)
+- **Serving:** SageMaker Multi-Model Endpoints
+- **Monitoring:** CloudWatch + SageMaker Model Monitor
+
+**SageMaker Multi-Model Endpoints:**
+
+```python
+import boto3
+
+sagemaker = boto3.client('sagemaker')
+
+# Create endpoint
+sagemaker.create_endpoint(
+    EndpointName='multi-model-endpoint',
+    EndpointConfigName='multi-model-config'
+)
+
+# Upload models to S3
+s3.upload_file('model1.tar.gz', 'bucket', 'models/model1.tar.gz')
+s3.upload_file('model2.tar.gz', 'bucket', 'models/model2.tar.gz')
+
+# Invoke specific model
+runtime = boto3.client('sagemaker-runtime')
+response = runtime.invoke_endpoint(
+    EndpointName='multi-model-endpoint',
+    TargetModel='model1.tar.gz',  # Specify which model
+    Body=json.dumps({'inputs': [...]})
+)
+```
+
+**Why Multi-Model Endpoints?**
+- Share instance across 100s of models
+- Models loaded on-demand (saves memory)
+- Cost-effective for many small models
+
+<Info>
+SageMaker is great for teams already on AWS. For multi-cloud or open-source preference, use EKS + Kubeflow.
+</Info>
+
+## GCP Example (Vertex AI)
+
+**Components:**
+- **Data:** GCS + BigQuery
+- **Processing:** Dataflow (Apache Beam)
+- **Training:** Vertex AI Training (managed)
+- **Pipelines:** Vertex AI Pipelines (Kubeflow-based)
+- **Serving:** Vertex AI Prediction
+- **Monitoring:** Cloud Monitoring + Vertex AI Model Monitoring
+
+**Vertex AI simplifies Kubeflow:**
+
+```python
+from google.cloud import aiplatform
+
+aiplatform.init(project='my-project', location='us-central1')
+
+job = aiplatform.CustomTrainingJob(
+    display_name='bert-training',
+    container_uri='gcr.io/my-project/trainer:v1',
+)
+
+model = job.run(
+    replica_count=4,
+    machine_type='n1-standard-8',
+    accelerator_type='NVIDIA_TESLA_T4',
+    accelerator_count=1
+)
+
+endpoint = model.deploy(machine_type='n1-standard-4')
+```
+
+Vertex AI handles:
+- Distributed training
+- Model versioning
+- A/B testing
+- Drift detection
+
+<Note>
+Vertex AI is the most "batteries-included" cloud ML platform. Use it if you're all-in on GCP.
+</Note>
+
+## Common Patterns
+
+### Hybrid Serving
+
+**Problem:** Some models need GPUs, others don't. Running all on GPU is wasteful.
+
+**Solution:**
+
+```
+API Gateway
+  ├─> Lightweight models (CPU, FastAPI)
+  └─> Heavy models (GPU, Triton)
+```
+
+Route based on model type:
+
+```python
+from fastapi import FastAPI
+import httpx
+
+app = FastAPI()
+
+@app.post('/predict')
+async def predict(request: Request):
+    if request.model in ['bert', 'gpt']:
+        # Route to GPU cluster
+        return await httpx.post('http://gpu-cluster/predict', json=request.dict())
+    else:
+        # Handle locally (CPU)
+        return model.predict(request.inputs)
+```
+
+### Feature Store
+
+**Problem:** Training uses batch features, serving needs real-time features. Code diverges.
+
+**Solution:** Centralized feature store (Feast, Tecton)
+
+```python
+from feast import FeatureStore
+
+store = FeatureStore(repo_path='.')
+
+# Training: batch features
+training_df = store.get_historical_features(
+    entity_df=entity_df,
+    features=['user_features:age', 'user_features:country']
+).to_df()
+
+# Serving: online features
+features = store.get_online_features(
+    features=['user_features:age', 'user_features:country'],
+    entity_rows=[{'user_id': 123}]
+).to_dict()
+```
+
+Feature store ensures consistency.
+
+<Info>
+Feature stores are essential for large teams (>20 data scientists) but overkill for small projects. Start simple.
+</Info>
+
+### Shadow Mode
+
+**Problem:** New model needs validation before replacing old one.
+
+**Solution:** Run both, compare predictions
+
+```python
+@app.post('/predict')
+def predict(request):
+    # Production model
+    prod_result = model_v1.predict(request.inputs)
+    
+    # Shadow model (logged, not returned)
+    shadow_result = model_v2.predict(request.inputs)
+    log_comparison(prod_result, shadow_result)
+    
+    return prod_result  # Only return prod
+```
+
+After validating shadow model performs well, swap it in.
+
+### A/B Testing
+
+```python
+import random
+
+@app.post('/predict')
+def predict(request):
+    user_id = request.user_id
+    if hash(user_id) % 100 < 10:  # 10% traffic
+        result = model_v2.predict(request.inputs)
+        variant = 'B'
+    else:
+        result = model_v1.predict(request.inputs)
+        variant = 'A'
+    
+    log_prediction(user_id, result, variant)
+    return result
+```
+
+Track metrics (accuracy, latency, user engagement) by variant.
+
+## Tech Radar
+
+Module 8 includes a **tech radar** (inspired by Thoughtworks):
+
+- **Adopt:** Proven, safe for production
+- **Trial:** Worth trying in non-critical projects
+- **Assess:** Interesting but not ready
+- **Hold:** Avoid or phase out
+
+Examples:
+- **Adopt:** FastAPI, Kubernetes, Prometheus, W&B
+- **Trial:** Dagster, vLLM, Modal
+- **Assess:** MLflow Model Registry, Seldon Core v2
+- **Hold:** TensorFlow (prefer PyTorch), Airflow 1.x
+
+<Note>
+Tech radars are opinionated. Build your own based on team experience and requirements.
+</Note>
+
+## Hands-On Examples
+
+Explore production patterns in [Module 8](/modules/module-8/overview):
+- Deploy multi-model endpoints on SageMaker
+- Understand buy vs build trade-offs
+- Review real-world architecture examples
+- Build a custom tech radar
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Course Overview" href="/introduction" icon="book">
+    Review all concepts
+  </Card>
+  <Card title="Module 1" href="/modules/module-1/overview" icon="play">
+    Start with containerization
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [AWS Well-Architected ML Lens](https://docs.aws.amazon.com/wellarchitected/latest/machine-learning-lens/machine-learning-lens.html)
+- [Google Cloud Architecture Center](https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning)
+- [Feature Store Comparison](https://feast.dev/blog/feature-store-comparison/)
+- [Thoughtworks Tech Radar](https://www.thoughtworks.com/radar)

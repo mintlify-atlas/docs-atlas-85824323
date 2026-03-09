@@ -1,0 +1,626 @@
+---
+title: "CI/CD with GitHub Actions"
+description: "Automate building, testing, and deploying ML containers with GitHub Actions"
+---
+
+## Introduction
+
+Continuous Integration and Continuous Delivery (CI/CD) automates the software development lifecycle—from code commit to production deployment. For ML systems, CI/CD ensures reproducible builds, automated testing, and reliable deployments.
+
+<Note>
+GitHub Actions provides free CI/CD for public repositories and tight integration with GitHub Container Registry, making it ideal for ML projects.
+</Note>
+
+## Why CI/CD for ML?
+
+### Benefits
+
+- **Reproducibility**: Every build is documented and reproducible
+- **Quality gates**: Automated tests catch issues before production
+- **Fast iteration**: Deploy changes in minutes, not hours
+- **Collaboration**: Team members can safely contribute without breaking production
+- **Audit trail**: Full history of what was deployed, when, and by whom
+
+<Warning>
+Without CI/CD, manual deployments are error-prone and create bottlenecks. "It works on my machine" becomes a production incident.
+</Warning>
+
+## GitHub Actions Basics
+
+GitHub Actions workflows are defined in YAML files under `.github/workflows/`. Each workflow contains jobs that run on specific triggers (push, pull request, schedule, etc.).
+
+### Basic Workflow Structure
+
+```yaml
+name: Workflow Name
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  job-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run command
+        run: echo "Hello, CI/CD!"
+```
+
+## Module 1 CI/CD Workflows
+
+Module 1 includes two workflow files demonstrating different patterns:
+
+- **module-1-basic.yaml**: Build and push Docker images
+- **module-1-advanced.yaml**: Test Kubernetes deployments and Modal integration
+
+### Basic Workflow: Docker Build and Push
+
+<CodeGroup>
+
+```yaml module-1-basic.yaml
+name: Module 1 Basic
+
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'module-1/**'
+      
+env:
+  IMAGE_ML_APP: app-ml
+  IMAGE_ML_WEB: app-web
+
+
+jobs:
+  ci-test-bash-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 
+        uses: actions/checkout@v4
+
+      - name: Test echo
+        run: |
+          echo 'test'
+
+      - name: Test ls
+        run: |
+          ls -all .
+
+  app-ml-docker-but-with-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login 
+        run: |
+          docker login ghcr.io -u truskovskiyk -p ${{ secrets.GH_TOKEN }}
+
+      - name: Build 
+        run: |
+          docker build --tag ghcr.io/kyryl-opens-ml/app-ml:latest ./module-1/app-ml
+
+      - name: Push 
+        run: |
+          docker push ghcr.io/kyryl-opens-ml/app-ml:latest
+
+      - name: Run ok
+        run: |
+          docker run --rm --name app-ml-test-run ghcr.io/kyryl-opens-ml/app-ml:latest
+
+  app-ml-docker:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+    
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ghcr.io/kyryl-opens-ml/app-ml
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: module-1/app-ml/
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  app-web-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ghcr.io/kyryl-opens-ml/app-web
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: module-1/app-web/
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+```
+
+</CodeGroup>
+
+### Workflow Breakdown
+
+<Steps>
+  <Step title="Trigger Configuration">
+    ```yaml
+    on:
+      push:
+        branches: [main]
+      pull_request:
+        branches: [main]
+        paths: ['module-1/**']
+    ```
+    
+    Runs on pushes to main and PRs that modify module-1 files.
+  </Step>
+  
+  <Step title="Authentication">
+    ```yaml
+    - name: Log in to the Container registry
+      uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    ```
+    
+    Uses GitHub's built-in token for authentication—no manual secrets needed!
+  </Step>
+  
+  <Step title="Metadata Extraction">
+    ```yaml
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+      with:
+        images: ghcr.io/kyryl-opens-ml/app-ml
+    ```
+    
+    Automatically generates tags based on branch, PR, or Git tags.
+  </Step>
+  
+  <Step title="Build and Push">
+    ```yaml
+    - name: Build and push Docker image
+      uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+      with:
+        context: module-1/app-ml/
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+    ```
+    
+    Builds the image and pushes to GitHub Container Registry.
+  </Step>
+</Steps>
+
+### Two Approaches: CLI vs Actions
+
+The workflow demonstrates two equivalent approaches:
+
+<Tabs>
+  <Tab title="Using Docker CLI">
+    ```yaml
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Login 
+      run: |
+        docker login ghcr.io -u truskovskiyk -p ${{ secrets.GH_TOKEN }}
+
+    - name: Build 
+      run: |
+        docker build --tag ghcr.io/kyryl-opens-ml/app-ml:latest ./module-1/app-ml
+
+    - name: Push 
+      run: |
+        docker push ghcr.io/kyryl-opens-ml/app-ml:latest
+    ```
+    
+    Direct Docker commands—more control, more verbose.
+  </Tab>
+  
+  <Tab title="Using Docker Actions">
+    ```yaml
+    - name: Log in to the Container registry
+      uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+      with:
+        context: module-1/app-ml/
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+    ```
+    
+    Pre-built actions—cleaner, better caching, recommended approach.
+  </Tab>
+</Tabs>
+
+<Note>
+Using official Docker actions (`docker/build-push-action`) provides better layer caching and BuildKit support, resulting in faster builds.
+</Note>
+
+## Advanced Workflow: Kubernetes Testing
+
+<CodeGroup>
+
+```yaml module-1-advanced.yaml
+name: Module 1 Advanced
+
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'module-1/**'
+
+jobs:
+        
+  k8s-test-deployment-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.4.0
+
+      - name: Checkout 
+        uses: actions/checkout@v4
+
+      - name: Deploy application
+        run: |
+          kubectl create -f module-1/k8s-resources/deployment-app-web.yaml
+
+      - name: Print pods
+        run: |
+          sleep 5 && kubectl get pod -A
+
+      - name: Print pods
+        run: |
+          kubectl wait --for=condition=available --timeout=180s deployment/deployments-app-web
+
+      - name: Print pods
+        run: |
+          sleep 5 && kubectl get pod -A
+
+
+  modal-lab-example-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' 
+
+      - name: Install modal & setup creds
+        run: |
+          pip install modal --upgrade
+          modal token set --token-id ${{ secrets.MODAL_MODAL_LABS_TOKEN_ID }} --token-secret ${{ secrets.MODAL_MODAL_LABS_TOKEN_SECRET }}
+
+      - name: Run function
+        run: |
+          modal run ./module-1/modal-examples/modal_hello_world.py
+```
+
+</CodeGroup>
+
+### Kubernetes Integration Testing
+
+<Steps>
+  <Step title="Create Kind Cluster">
+    ```yaml
+    - name: Create k8s Kind Cluster
+      uses: helm/kind-action@v1.4.0
+    ```
+    
+    Spins up a local Kubernetes cluster in the CI environment.
+  </Step>
+  
+  <Step title="Deploy Application">
+    ```yaml
+    - name: Deploy application
+      run: |
+        kubectl create -f module-1/k8s-resources/deployment-app-web.yaml
+    ```
+    
+    Deploys your Kubernetes manifests.
+  </Step>
+  
+  <Step title="Wait for Ready">
+    ```yaml
+    - name: Wait for deployment
+      run: |
+        kubectl wait --for=condition=available --timeout=180s deployment/deployments-app-web
+    ```
+    
+    Ensures deployment completes successfully before proceeding.
+  </Step>
+</Steps>
+
+<Note>
+Testing Kubernetes manifests in CI catches configuration errors before they reach production. This is especially important for complex deployments with multiple resources.
+</Note>
+
+### Modal Serverless Testing
+
+```yaml
+- name: Install modal & setup creds
+  run: |
+    pip install modal --upgrade
+    modal token set --token-id ${{ secrets.MODAL_MODAL_LABS_TOKEN_ID }} \
+                    --token-secret ${{ secrets.MODAL_MODAL_LABS_TOKEN_SECRET }}
+
+- name: Run function
+  run: |
+    modal run ./module-1/modal-examples/modal_hello_world.py
+```
+
+This validates that Modal functions work correctly before deployment.
+
+## Best Practices
+
+### Matrix Builds
+
+Test multiple Python versions simultaneously:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+```
+
+### Caching Dependencies
+
+Speed up builds with dependency caching:
+
+```yaml
+- uses: actions/setup-python@v5
+  with:
+    python-version: '3.10'
+    cache: 'pip'
+
+- name: Install dependencies
+  run: pip install -r requirements.txt
+```
+
+### Path Filtering
+
+Run workflows only when relevant files change:
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - 'module-1/**'
+      - '.github/workflows/module-1-*.yaml'
+```
+
+### Environment Secrets
+
+Store sensitive data in GitHub Secrets:
+
+```yaml
+env:
+  WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+```
+
+<Warning>
+Never hardcode secrets in workflow files. Always use `${{ secrets.SECRET_NAME }}` syntax.
+</Warning>
+
+### Job Dependencies
+
+Control job execution order:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps: [...]
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps: [...]
+
+  deploy:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps: [...]
+```
+
+## ML-Specific CI/CD Patterns
+
+### Model Training Pipeline
+
+```yaml
+jobs:
+  train-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Train model
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        run: python train.py
+      
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model
+          path: models/model.pkl
+```
+
+### Model Validation
+
+```yaml
+- name: Validate model performance
+  run: |
+    python validate.py --model models/model.pkl --threshold 0.85
+```
+
+### Automated Deployment
+
+```yaml
+deploy:
+  needs: [build, test]
+  if: github.ref == 'refs/heads/main'
+  runs-on: ubuntu-latest
+  steps:
+    - name: Deploy to production
+      run: |
+        kubectl set image deployment/model-server \
+          server=ghcr.io/username/model-server:${{ github.sha }}
+```
+
+## CI/CD Providers
+
+While Module 1 uses GitHub Actions, many alternatives exist:
+
+| Provider | Best For | Notes |
+|----------|----------|-------|
+| [GitHub Actions](https://docs.github.com/en/actions) | GitHub projects | Free for public repos, tight integration |
+| [CircleCI](https://circleci.com/) | Complex pipelines | Advanced caching, powerful workflows |
+| [Jenkins](https://www.jenkins.io/) | Self-hosted, customization | Requires maintenance, very flexible |
+| [Travis CI](https://www.travis-ci.com/) | Open source projects | Simple YAML config |
+
+See [awesome-ci](https://github.com/ligurio/awesome-ci) for a comprehensive list.
+
+## Monitoring and Debugging
+
+### Viewing Workflow Runs
+
+Navigate to the "Actions" tab in your GitHub repository to see:
+
+- Workflow run history
+- Job logs and timing
+- Artifacts and test results
+- Failed step details
+
+### Debugging Failed Workflows
+
+<Tabs>
+  <Tab title="Enable Debug Logging">
+    Set repository secrets:
+    - `ACTIONS_RUNNER_DEBUG`: true
+    - `ACTIONS_STEP_DEBUG`: true
+    
+    Provides verbose logging for troubleshooting.
+  </Tab>
+  
+  <Tab title="SSH into Runner">
+    ```yaml
+    - name: Setup tmate session
+      if: failure()
+      uses: mxschmitt/action-tmate@v3
+    ```
+    
+    Allows interactive debugging via SSH when jobs fail.
+  </Tab>
+  
+  <Tab title="Local Testing">
+    Use [act](https://github.com/nektos/act) to run workflows locally:
+    
+    ```bash
+    # Install act
+    brew install act
+    
+    # Run workflow locally
+    act -j job-name
+    ```
+  </Tab>
+</Tabs>
+
+## Resources
+
+### Learning Materials
+
+- [Introduction to GitHub Actions](https://docs.github.com/en/actions/learn-github-actions)
+- [Docker and GitHub Actions](https://docs.docker.com/build/ci/github-actions/)
+- [CI/CD for Machine Learning (GitOps)](https://www.wandb.courses/courses/ci-cd-for-machine-learning) - Free course by Weights & Biases
+
+### Advanced Topics
+
+- [Continuous Delivery for Machine Learning](https://martinfowler.com/articles/cd4ml.html)
+- [GitHub Actions Best Practices](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
+
+## Next Steps
+
+Explore simpler alternatives to Kubernetes with [Serverless Platforms](/modules/module-1/serverless), or jump into the [Practice Exercise](/modules/module-1/practice) to apply everything you've learned.

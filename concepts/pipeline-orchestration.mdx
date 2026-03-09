@@ -1,0 +1,282 @@
+---
+title: "Pipeline Orchestration"
+description: "Automating ML workflows with Airflow, Kubeflow, and Dagster"
+---
+
+## Why Orchestration Matters
+
+ML systems are more than just training scripts. Production pipelines involve:
+- **Data ingestion** from multiple sources
+- **Preprocessing** and feature engineering
+- **Training** (often with hyperparameter sweeps)
+- **Evaluation** and model comparison
+- **Deployment** to staging/production
+- **Monitoring** and retraining triggers
+
+Doing this manually is error-prone and doesn't scale. Orchestration platforms automate these workflows, handle failures, and provide observability.
+
+## What is a DAG?
+
+Orchestration tools represent workflows as **Directed Acyclic Graphs (DAGs)**:
+
+```
+load_data → preprocess → train → evaluate → deploy
+                              ↘        ↗
+                            hyperparameter_search
+```
+
+Each node is a task. Edges represent dependencies. The scheduler ensures tasks run in the right order and retries failures.
+
+## Platform Comparison
+
+<CardGroup cols={3}>
+  <Card title="Airflow" icon="wind">
+    **Best for:** General-purpose workflows, batch jobs
+    
+    **Pros:** Battle-tested, huge ecosystem, Python-based
+    
+    **Cons:** UI can be clunky, requires careful resource management
+  </Card>
+  <Card title="Kubeflow Pipelines" icon="cubes">
+    **Best for:** Kubernetes-native ML workflows
+    
+    **Pros:** Strong artifact tracking, integrates with K8s, UI for pipeline visualization
+    
+    **Cons:** Complex setup, Kubernetes required
+  </Card>
+  <Card title="Dagster" icon="layer-group">
+    **Best for:** Data pipelines, modern developer experience
+    
+    **Pros:** Software-defined assets, type system, great UI, testing support
+    
+    **Cons:** Newer (less mature), smaller community
+  </Card>
+</CardGroup>
+
+<Note>
+For greenfield ML projects, **Dagster** offers the best developer experience. For existing systems, **Airflow** is the safest bet. If you're all-in on Kubernetes, **Kubeflow** provides deep integration.
+</Note>
+
+## Apache Airflow
+
+Airflow is the most popular orchestration tool. DAGs are Python code:
+
+```python
+from airflow import DAG
+from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
+from datetime import datetime
+
+with DAG(
+    'training_pipeline',
+    start_date=datetime(2024, 1, 1),
+    schedule_interval='@daily',
+) as dag:
+    
+    load_data = KubernetesPodOperator(
+        task_id='load_data',
+        image='myorg/data-loader:v1',
+        namespace='default',
+    )
+    
+    train_model = KubernetesPodOperator(
+        task_id='train_model',
+        image='myorg/trainer:v1',
+        namespace='default',
+    )
+    
+    load_data >> train_model  # Define dependency
+```
+
+**Key features:**
+- **KubernetesPodOperator**: Run each task as a K8s pod (full isolation)
+- **Scheduling**: Cron-like schedules or event triggers
+- **Retries**: Automatic retry with exponential backoff
+- **Backfilling**: Rerun past intervals easily
+
+<Info>
+For production, use **Astronomer** (managed Airflow) or **MWAA** (AWS Managed Workflows for Apache Airflow) to avoid infrastructure headaches.
+</Info>
+
+### Passing Data Between Tasks
+
+Airflow has two approaches:
+
+1. **XComs** (small data): Pass JSON-serializable values
+   ```python
+   task_instance.xcom_push(key='model_id', value='bert-v2')
+   model_id = task_instance.xcom_pull(key='model_id')
+   ```
+
+2. **Artifacts** (large data): Write to S3/GCS, pass path via XCom
+   ```python
+   # In first task
+   save_to_s3(df, 's3://bucket/processed.parquet')
+   task_instance.xcom_push(key='data_path', value='s3://bucket/processed.parquet')
+   
+   # In second task
+   path = task_instance.xcom_pull(key='data_path')
+   df = load_from_s3(path)
+   ```
+
+<Note>
+Never pass large datasets through XComs. Always use object storage (S3/GCS/MinIO) for intermediate data.
+</Note>
+
+## Kubeflow Pipelines
+
+Kubeflow is Kubernetes-native and provides strong artifact tracking:
+
+```python
+from kfp import dsl
+from kfp.dsl import Input, Output, Dataset, Model
+
+@dsl.component
+def preprocess_data(input_data: Input[Dataset], output_data: Output[Dataset]):
+    # Component implementation
+    pass
+
+@dsl.component
+def train_model(input_data: Input[Dataset], model: Output[Model]):
+    # Training logic
+    pass
+
+@dsl.pipeline(name='Training Pipeline')
+def training_pipeline():
+    preprocess = preprocess_data()
+    train = train_model(input_data=preprocess.outputs['output_data'])
+
+from kfp import compiler
+compiler.Compiler().compile(training_pipeline, 'pipeline.yaml')
+```
+
+**Advantages:**
+- **Artifact tracking**: Inputs/outputs are first-class citizens
+- **Lineage**: Track which data produced which model
+- **UI**: Visualize DAG and inspect artifacts
+- **Vertex AI**: Google Cloud offers managed Kubeflow
+
+<Info>
+Kubeflow uses Argo Workflows under the hood for scheduling. Each component runs in its own container.
+</Info>
+
+## Dagster
+
+Dagster treats data as **assets** (tables, models, reports) instead of tasks:
+
+```python
+from dagster import asset, AssetExecutionContext
+import pandas as pd
+
+@asset
+def raw_data() -> pd.DataFrame:
+    return pd.read_csv('s3://bucket/data.csv')
+
+@asset
+def processed_data(raw_data: pd.DataFrame) -> pd.DataFrame:
+    return raw_data.dropna()
+
+@asset
+def trained_model(processed_data: pd.DataFrame) -> str:
+    model = train(processed_data)
+    model_path = 's3://bucket/model.pkl'
+    save(model, model_path)
+    return model_path
+```
+
+**Why assets?**
+- Dependencies are inferred from function signatures
+- Type checking catches errors at compile time
+- Easier to test (just call the function!)
+- Built-in data quality checks
+
+**Asset checks:**
+
+```python
+from dagster import asset_check, AssetCheckResult
+
+@asset_check(asset=processed_data)
+def no_nulls(processed_data: pd.DataFrame):
+    num_nulls = processed_data.isnull().sum().sum()
+    return AssetCheckResult(passed=num_nulls == 0, metadata={'num_nulls': num_nulls})
+```
+
+<Note>
+Dagster's software-defined assets are a paradigm shift. Instead of "run this task", you think "materialize this asset". This makes pipelines more declarative and testable.
+</Note>
+
+## Choosing a Platform
+
+| Criteria | Airflow | Kubeflow | Dagster |
+|----------|---------|----------|----------|
+| **Maturity** | Very high | High | Medium |
+| **Learning curve** | Medium | High | Low |
+| **K8s required** | No | Yes | No |
+| **Artifact tracking** | Manual | Built-in | Built-in |
+| **Testing** | Hard | Medium | Easy |
+| **Best for** | Batch ETL | K8s ML workflows | Data pipelines |
+
+<Info>
+Don't over-engineer early. Start with a simple Makefile or shell script. Graduate to orchestration when you have >5 tasks or need scheduling.
+</Info>
+
+## Integration with Training
+
+All platforms integrate with experiment tracking:
+
+```python
+# In your training task/component
+import wandb
+
+wandb.init(project='my-project', tags=['pipeline', 'production'])
+train_model()
+wandb.log_artifact(model, name=f'model-{run_id}', type='model')
+```
+
+The orchestrator provides context (run ID, pipeline name) that you can pass to W&B/MLflow for lineage.
+
+## Modal for Serverless Orchestration
+
+For simpler workflows, Modal offers serverless functions:
+
+```python
+import modal
+
+stub = modal.Stub('training-pipeline')
+
+@stub.function(gpu='A10G', timeout=3600)
+def train():
+    # Training code
+    pass
+
+@stub.local_entrypoint()
+def main():
+    train.remote()  # Runs on Modal's infrastructure
+```
+
+Modal handles containers, scheduling, and scaling. Great for prototypes and small teams.
+
+## Hands-On Examples
+
+Explore orchestration in [Module 4](/modules/module-4/overview):
+- Airflow DAGs for training and inference
+- Kubeflow Pipelines with artifact tracking
+- Dagster asset-based workflows
+- Deploying Modal functions from pipelines
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Serving" href="/concepts/model-serving" icon="server">
+    Deploy models from pipelines
+  </Card>
+  <Card title="Monitoring" href="/concepts/monitoring" icon="chart-line">
+    Track pipeline health
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [Airflow Best Practices](https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html)
+- [Kubeflow Pipelines Docs](https://www.kubeflow.org/docs/components/pipelines/)
+- [Dagster Concepts](https://docs.dagster.io/concepts)
+- [Astronomer Registry (Airflow Examples)](https://registry.astronomer.io/)

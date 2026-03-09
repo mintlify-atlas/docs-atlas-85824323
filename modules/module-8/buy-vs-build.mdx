@@ -1,0 +1,215 @@
+---
+title: "Buy vs Build Decision Framework"
+description: "Structured approach to evaluating whether to build custom ML infrastructure or adopt managed platforms"
+---
+
+## Decision Framework
+
+When building production ML systems, one of the most critical strategic decisions is whether to build custom infrastructure or adopt managed platforms. This decision impacts cost, time to market, flexibility, and long-term maintenance.
+
+## Key Evaluation Criteria
+
+### 1. Cost Analysis
+
+**Build (Custom Infrastructure)**
+- High upfront development cost
+- Ongoing maintenance and operations cost
+- Need to hire specialized infrastructure engineers
+- Potential for optimization to specific use cases
+
+**Buy (Managed Platform)**
+- Pay-as-you-go pricing model
+- Lower upfront investment
+- Costs scale with usage
+- May be more expensive at very large scale
+
+### 2. Time to Market
+
+**Build**
+- 6-12+ months to build foundational infrastructure
+- Additional time for each new feature
+- Requires building reliability, monitoring, scaling from scratch
+
+**Buy**
+- Days to weeks to get started
+- Immediate access to advanced features
+- Faster iteration and experimentation
+- Pre-built integrations and best practices
+
+### 3. Team Expertise
+
+**Build**
+- Requires deep expertise in:
+  - Distributed systems
+  - Container orchestration (Kubernetes)
+  - Cloud infrastructure (IaC)
+  - ML serving frameworks (TensorFlow Serving, TorchServe, Triton)
+  - Monitoring and observability
+
+**Buy**
+- Requires knowledge of:
+  - Platform-specific APIs and SDKs
+  - ML fundamentals
+  - Platform limitations and workarounds
+
+### 4. Flexibility and Customization
+
+**Build**
+- Complete control over architecture
+- Custom optimizations possible
+- Can integrate with any tool or framework
+- Freedom to implement novel techniques
+
+**Buy**
+- Limited to platform capabilities
+- Some customization through containers
+- May require workarounds for edge cases
+- Faster adoption of platform innovations
+
+### 5. Vendor Lock-in
+
+**Build**
+- Full portability across clouds
+- No dependency on vendor roadmap
+- Can switch providers easily
+
+**Buy**
+- Harder to migrate between platforms
+- Code tied to platform APIs
+- Risk of vendor changes or discontinuation
+- Can be mitigated with abstraction layers
+
+## Decision Matrix
+
+<Note>
+Use this matrix to evaluate your specific situation. Different organizations will have different optimal choices.
+</Note>
+
+| Factor | Favor Build | Favor Buy |
+|--------|-------------|----------|
+| **Scale** | Very large scale (thousands of models) | Small to medium scale |
+| **Timeline** | 12+ months available | Need production in 3-6 months |
+| **Team Size** | Large ML platform team (10+) | Small team (2-5 engineers) |
+| **Budget** | High upfront investment available | Limited upfront, prefer OpEx |
+| **Requirements** | Highly specialized needs | Standard ML workflows |
+| **Expertise** | Deep infrastructure expertise | ML-focused team |
+
+## Hybrid Approach
+
+Many organizations adopt a hybrid strategy:
+
+```
+Phase 1: Start with managed platform (Buy)
+- Validate product-market fit
+- Learn production requirements
+- Build ML team and expertise
+
+Phase 2: Selective customization (Buy + Build)
+- Keep platform for standard workflows
+- Build custom components for specialized needs
+- Use platform APIs and extend with custom code
+
+Phase 3: Evaluate full migration (Optional)
+- Only if scale and requirements justify it
+- Gradual migration to reduce risk
+- Maintain compatibility during transition
+```
+
+## Platform Comparison
+
+### AWS SageMaker
+
+**Strengths:**
+- Comprehensive feature set (training, tuning, deployment, monitoring)
+- Strong integration with AWS ecosystem
+- Multiple deployment options (real-time, batch, async, multi-model)
+- Large community and extensive documentation
+
+**Limitations:**
+- Can be expensive at scale
+- Learning curve for AWS services
+- Some features tied to specific instance types
+
+### GCP Vertex AI
+
+**Strengths:**
+- Unified interface for ML workflows
+- Strong AutoML capabilities
+- Integration with Google Cloud services
+- Good support for TensorFlow and custom containers
+
+**Limitations:**
+- Smaller ecosystem compared to AWS
+- Fewer deployment options
+- Less mature monitoring features
+
+### Azure Machine Learning
+
+**Strengths:**
+- Integration with Microsoft ecosystem
+- Good enterprise features (security, compliance)
+- Support for various ML frameworks
+
+**Limitations:**
+- Smaller community and fewer resources
+- Some features lag behind competitors
+
+## Recommendation Process
+
+<Steps>
+  <Step title="Assess Current State">
+    Document your team size, expertise, timeline, and budget constraints
+  </Step>
+  
+  <Step title="Define Requirements">
+    List must-have features, scale requirements, and integration needs
+  </Step>
+  
+  <Step title="Prototype on Platform">
+    Spend 2-4 weeks building a proof of concept on a managed platform
+  </Step>
+  
+  <Step title="Estimate Build Cost">
+    Calculate realistic cost and timeline for building equivalent functionality
+  </Step>
+  
+  <Step title="Make Decision">
+    Compare total cost of ownership over 2-3 years
+  </Step>
+</Steps>
+
+## Common Pitfalls
+
+<Warning>
+**Avoid these common mistakes:**
+
+1. **Underestimating build time** - Custom infrastructure takes 2-3x longer than estimated
+2. **Ignoring maintenance cost** - Ongoing operations often exceed development cost
+3. **Premature optimization** - Building for scale before validating product fit
+4. **Not considering team constraints** - Requiring expertise you don't have
+5. **Vendor lock-in paranoia** - Avoiding all platforms due to theoretical lock-in risk
+</Warning>
+
+## Tech Radar
+
+Consider using a tech radar to track and evaluate ML tools and platforms:
+
+- [Zalando Tech Radar](https://github.com/zalando/tech-radar)
+- [Preply Tech Radar](https://tech-radar.preply.com/)
+
+This helps visualize your organization's technology choices and their maturity:
+- **Adopt** - Proven and recommended
+- **Trial** - Worth exploring for specific use cases
+- **Assess** - Monitor but don't invest yet
+- **Hold** - Avoid or phase out
+
+## Further Reading
+
+- [MLOps Platforms Overview](https://github.com/thoughtworks/mlops-platforms)
+- [Machine Learning Tools Landscape v2](https://huyenchip.com/2020/12/30/mlops-v2.html)
+- [MLOps Landscape in 2024](https://neptune.ai/blog/mlops-tools-platforms-landscape)
+- [Azure AI Reference Architectures](https://github.com/microsoft/AI)
+
+<Card title="Next: AWS SageMaker" icon="arrow-right" href="./aws-sagemaker">
+  Learn how to deploy multi-model endpoints on AWS SageMaker
+</Card>

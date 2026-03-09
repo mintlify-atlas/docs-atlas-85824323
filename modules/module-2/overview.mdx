@@ -1,0 +1,91 @@
+---
+title: 'Module 2: Data Management'
+description: 'Master data storage, processing, and management for production ML systems'
+icon: 'database'
+---
+
+## Overview
+
+This module covers essential data management practices for machine learning in production. You'll learn how to deploy storage systems, work with various data formats, handle streaming datasets, implement vector databases for RAG applications, and set up data labeling workflows.
+
+## What You'll Learn
+
+<CardGroup cols={2}>
+  <Card title="Data Storage" icon="box" href="/modules/module-2/storage">
+    Deploy MinIO locally and on Kubernetes, implement S3-compatible storage, and manage datasets with DVC
+  </Card>
+  <Card title="Data Formats" icon="file" href="/modules/module-2/formats">
+    Compare storage formats, benchmark pandas performance, and optimize data loading/saving
+  </Card>
+  <Card title="Streaming Datasets" icon="water" href="/modules/module-2/streaming">
+    Create and consume streaming datasets for efficient data loading during training
+  </Card>
+  <Card title="Vector Databases" icon="vector-square" href="/modules/module-2/vector-databases">
+    Build RAG applications with LanceDB and implement semantic search
+  </Card>
+  <Card title="Data Labeling" icon="tags" href="/modules/module-2/labeling">
+    Deploy Argilla for data annotation and create synthetic datasets
+  </Card>
+  <Card title="Practice Tasks" icon="dumbbell" href="/modules/module-2/practice">
+    Complete hands-on exercises to reinforce your learning
+  </Card>
+</CardGroup>
+
+## Learning Objectives
+
+By the end of this module, you will be able to:
+
+- Deploy and configure object storage systems (MinIO, S3)
+- Implement Python clients for cloud storage with comprehensive tests
+- Benchmark and select appropriate data formats for your use case
+- Create streaming datasets for efficient training pipelines
+- Build vector databases for semantic search and RAG applications
+- Set up data labeling workflows with annotation tools
+- Version control datasets using DVC
+
+## Module Structure
+
+This module is divided into two main sections:
+
+### H3: Data Storage & Processing
+
+Focus on storage systems, data formats, and processing performance:
+- MinIO deployment (Docker, Kubernetes)
+- CRUD operations with Python clients
+- Data format benchmarking
+- Parallel inference optimization
+- Streaming datasets
+- Vector databases
+
+### H4: Data Labeling & Validation
+
+Focus on data quality and annotation:
+- Labeling guidelines development
+- Argilla deployment and usage
+- Synthetic data generation
+- Data validation techniques
+- Dataset versioning with DVC
+
+## Prerequisites
+
+- Python 3.10+
+- Docker and Kubernetes basics
+- Understanding of pandas and NumPy
+- Familiarity with S3 storage concepts
+
+## Key Technologies
+
+- **Storage**: MinIO, S3, DVC
+- **Formats**: Parquet, Feather, HDF5, CSV
+- **Streaming**: MosaicML Streaming, WebDataset
+- **Vector DB**: LanceDB, sentence-transformers
+- **Labeling**: Argilla, Label Studio
+- **Processing**: Ray, multiprocessing, concurrent.futures
+
+<Tip>
+Start with the storage section to set up your infrastructure, then progress through formats and streaming before tackling vector databases and labeling.
+</Tip>
+
+## Next Steps
+
+Begin with [Data Storage](/modules/module-2/storage) to learn how to deploy MinIO and implement S3-compatible storage clients.

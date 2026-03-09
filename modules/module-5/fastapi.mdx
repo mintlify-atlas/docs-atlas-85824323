@@ -1,0 +1,396 @@
+---
+title: "FastAPI Model Serving"
+description: "Build production-ready REST APIs with FastAPI and Pydantic"
+---
+
+## Overview
+
+FastAPI provides a modern, high-performance framework for building ML model APIs with automatic validation, documentation, and type safety.
+
+## Implementation
+
+### API Structure
+
+The FastAPI server (`serving/fast_api.py`) implements two endpoints:
+
+```python serving/fast_api.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+from serving.predictor import Predictor
+
+class Payload(BaseModel):
+    text: List[str]
+
+class Prediction(BaseModel):
+    probs: List[List[float]]
+
+app = FastAPI()
+predictor = Predictor.default_from_model_registry()
+
+@app.get("/health_check")
+def health_check() -> str:
+    return "ok"
+
+@app.post("/predict", response_model=Prediction)
+def predict(payload: Payload) -> Prediction:
+    prediction = predictor.predict(text=payload.text)
+    return Prediction(probs=prediction.tolist())
+```
+
+### Request/Response Models
+
+<CodeGroup>
+```json Request Format
+{
+  "text": ["good", "bad"]
+}
+```
+
+```json Response Format
+{
+  "probs": [
+    [0.1, 0.9],
+    [0.8, 0.2]
+  ]
+}
+```
+</CodeGroup>
+
+**Payload schema:**
+- `text`: List of strings to classify
+- Validated by Pydantic at runtime
+- Automatic error messages for invalid input
+
+**Prediction schema:**
+- `probs`: List of probability distributions
+- Each inner list sums to 1.0
+- Length matches number of input texts
+
+## API Endpoints
+
+### Health Check
+
+```bash
+GET /health_check
+```
+
+**Purpose:** Kubernetes liveness/readiness probes
+
+**Response:**
+```json
+"ok"
+```
+
+**Usage:**
+```bash
+curl http://localhost:8080/health_check
+```
+
+### Predict
+
+```bash
+POST /predict
+```
+
+**Purpose:** Classify text sequences
+
+**Request body:**
+```json
+{
+  "text": ["This is great!", "This is terrible."]
+}
+```
+
+**Response:**
+```json
+{
+  "probs": [
+    [0.05, 0.95],
+    [0.92, 0.08]
+  ]
+}
+```
+
+**Error handling:**
+- `422 Unprocessable Entity`: Invalid input format
+- `500 Internal Server Error`: Model prediction failure
+
+## Testing
+
+Tests use FastAPI's `TestClient` for integration testing:
+
+```python tests/test_fast_api.py
+import pytest
+from fastapi.testclient import TestClient
+from serving.fast_api import app
+
+client = TestClient(app)
+
+def test_health_check():
+    response = client.get("/health_check")
+    assert response.status_code == 200
+    assert response.json() == "ok"
+
+def test_predict():
+    response = client.post("/predict", json={"text": ["this is test"]})
+    assert response.status_code == 200
+    probs = response.json()["probs"][0]
+    assert len(probs) == 2
+    assert sum(probs) == pytest.approx(1.0)
+```
+
+**Test coverage:**
+- Health check endpoint
+- Prediction endpoint with validation
+- Probability distribution validation
+
+**Run tests:**
+```bash
+pytest -ss ./tests
+```
+
+## Local Development
+
+### Using Make
+
+```bash
+# Build and run
+make run_fast_api
+```
+
+This:
+1. Builds Docker image with `app-fastapi` target
+2. Runs container on port 8081
+3. Mounts W&B API key from environment
+
+### Using Docker Directly
+
+```bash
+# Build
+docker build -f Dockerfile -t app-fastapi:latest --target app-fastapi .
+
+# Run
+docker run -it -p 8081:8080 \
+  -e WANDB_API_KEY=${WANDB_API_KEY} \
+  app-fastapi:latest
+```
+
+### Manual Testing
+
+```bash
+# Test with sample data
+curl -X POST -H "Content-Type: application/json" \
+  -d @data-samples/samples.json \
+  http://0.0.0.0:8080/predict
+
+# Expected output
+{
+  "probs": [
+    [0.23, 0.77],
+    [0.89, 0.11]
+  ]
+}
+```
+
+## Kubernetes Deployment
+
+### Manifest Structure
+
+```yaml k8s/app-fastapi.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-fastapi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-fastapi
+  template:
+    metadata:
+      labels:
+        app: app-fastapi
+    spec:
+      containers:
+        - name: app-fastapi
+          image: ghcr.io/kyryl-opens-ml/app-fastapi:latest
+          env:
+          - name: WANDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: wandb
+                key: WANDB_API_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-fastapi
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    app: app-fastapi
+```
+
+**Key configuration:**
+- **Replicas**: 2 pods for high availability
+- **Image**: Pulled from GitHub Container Registry
+- **Secrets**: W&B API key from Kubernetes secret
+- **Service**: ClusterIP exposes port 8080
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Create cluster">
+    ```bash
+    kind create cluster --name ml-in-production
+    ```
+  </Step>
+  
+  <Step title="Create secrets">
+    ```bash
+    export WANDB_API_KEY='your-key-here'
+    kubectl create secret generic wandb \
+      --from-literal=WANDB_API_KEY=$WANDB_API_KEY
+    ```
+  </Step>
+  
+  <Step title="Deploy application">
+    ```bash
+    kubectl create -f k8s/app-fastapi.yaml
+    ```
+  </Step>
+  
+  <Step title="Verify deployment">
+    ```bash
+    kubectl get pods -l app=app-fastapi
+    kubectl logs -l app=app-fastapi
+    ```
+  </Step>
+  
+  <Step title="Port forward">
+    ```bash
+    kubectl port-forward --address 0.0.0.0 svc/app-fastapi 8080:8080
+    ```
+  </Step>
+</Steps>
+
+### Testing in Kubernetes
+
+```bash
+# Health check
+curl http://localhost:8080/health_check
+
+# Prediction
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"text": ["test input"]}' \
+  http://localhost:8080/predict
+```
+
+## Production Considerations
+
+### Performance
+
+<Warning>
+The model loads on startup. For faster cold starts, consider:
+- Model caching in persistent volumes
+- Init containers for model download
+- Warm-up requests after deployment
+</Warning>
+
+**Optimization strategies:**
+- Use `uvicorn` workers for concurrency
+- Enable model batching for throughput
+- Add Redis for response caching
+- Implement request queuing
+
+### Monitoring
+
+Add observability with middleware:
+
+```python
+from fastapi import Request
+import time
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+```
+
+**Metrics to track:**
+- Request latency (p50, p95, p99)
+- Throughput (requests/second)
+- Error rate (4xx, 5xx)
+- Model inference time
+
+### Error Handling
+
+Enhance error responses:
+
+```python
+from fastapi import HTTPException
+
+@app.post("/predict", response_model=Prediction)
+def predict(payload: Payload) -> Prediction:
+    try:
+        prediction = predictor.predict(text=payload.text)
+        return Prediction(probs=prediction.tolist())
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prediction failed: {str(e)}"
+        )
+```
+
+### API Documentation
+
+FastAPI automatically generates docs:
+
+- **Swagger UI**: `http://localhost:8080/docs`
+- **ReDoc**: `http://localhost:8080/redoc`
+- **OpenAPI spec**: `http://localhost:8080/openapi.json`
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Validation" icon="check">
+    Use Pydantic models for all inputs/outputs
+  </Card>
+  <Card title="Versioning" icon="code-branch">
+    Version APIs with path prefixes (`/v1/predict`)
+  </Card>
+  <Card title="Rate Limiting" icon="gauge">
+    Add `slowapi` for request throttling
+  </Card>
+  <Card title="Authentication" icon="lock">
+    Implement API keys or OAuth for security
+  </Card>
+</CardGroup>
+
+## Comparison with Alternatives
+
+| Feature | FastAPI | Flask | Django |
+|---------|---------|-------|--------|
+| Performance | Excellent | Good | Moderate |
+| Type Safety | Yes | No | Partial |
+| Auto Docs | Yes | No | Partial |
+| Async Support | Yes | Limited | Yes |
+| Learning Curve | Low | Very Low | High |
+
+## Next Steps
+
+<Card title="Streamlit UI" icon="desktop" href="/modules/module-5/streamlit">
+  Build interactive web interfaces with Streamlit
+</Card>
+
+## Resources
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Pydantic Models](https://docs.pydantic.dev/)
+- [RESTful API Design Guidelines](https://github.com/zalando/restful-api-guidelines)
+- [APIs for Model Serving](https://madewithml.com/courses/mlops/api/)

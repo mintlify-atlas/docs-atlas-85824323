@@ -1,0 +1,542 @@
+---
+title: "LLM Training (Phi-3)"
+description: "Fine-tune large language models with LoRA and parameter-efficient techniques"
+---
+
+# LLM Training: Phi-3 and GenAI
+
+Learn to fine-tune modern large language models using parameter-efficient techniques like LoRA. This guide focuses on Microsoft's Phi-3, a compact yet powerful LLM.
+
+## Overview
+
+The generative example demonstrates:
+- Fine-tuning small LLMs (Phi-3)
+- LoRA (Low-Rank Adaptation) for efficient training
+- Instruction-following dataset preparation
+- Supervised Fine-Tuning (SFT) with TRL
+- Model deployment and inference
+
+<Info>
+**Example Model:** Microsoft Phi-3-mini-4k-instruct
+
+**Task:** Text-to-SQL generation with instruction following
+
+**Technique:** LoRA with SFTTrainer from TRL library
+</Info>
+
+## Why Phi-3?
+
+<CardGroup cols={2}>
+  <Card title="Compact Size" icon="compress">
+    3.8B parameters, runs on consumer GPUs
+  </Card>
+  <Card title="Strong Performance" icon="star">
+    Competitive with much larger models
+  </Card>
+  <Card title="Instruction Following" icon="message">
+    Pre-trained for chat and task completion
+  </Card>
+  <Card title="Open License" icon="unlock">
+    MIT license, freely usable
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+```bash
+# Navigate to generative example
+cd module-3/generative-example
+
+# Build container
+make build
+
+# Run with GPU
+make run_dev_gpu
+
+# Inside container:
+export PYTHONPATH=.
+export WANDB_PROJECT=ml-in-production-practice
+export WANDB_API_KEY=your_key
+
+# Train with LoRA
+python generative_example/cli.py train ./conf/example.json
+```
+
+## Project Structure
+
+```
+generative-example/
+├── generative_example/
+│   ├── __init__.py
+│   ├── cli.py               # Command-line interface
+│   ├── config.py            # LoRA configuration
+│   ├── data.py              # Dataset preparation
+│   ├── train.py             # SFT training with LoRA
+│   ├── predictor.py         # Inference wrapper
+│   └── utils.py
+├── conf/
+│   └── example.json         # Training configuration
+├── tests/
+└── requirements.txt
+```
+
+## Configuration
+
+LoRA-specific configuration:
+
+```python config.py
+from dataclasses import dataclass
+
+@dataclass
+class ModelArguments:
+    model_id: str                    # HuggingFace model ID
+    lora_r: int                      # LoRA rank (16)
+    lora_alpha: int                  # LoRA scaling (16)
+    lora_dropout: float              # Dropout rate (0.05)
+
+@dataclass
+class DataTrainingArguments:
+    train_file: str                  # JSONL training data
+    test_file: str                   # JSONL test data
+```
+
+### Training Configuration
+
+```json conf/example.json
+{
+  "train_file": "./data/train.json",
+  "test_file": "./data/test.json",
+  
+  "model_id": "microsoft/Phi-3-mini-4k-instruct",
+  "lora_r": 16,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  
+  "output_dir": "./phi-3-mini-lora-text2sql",
+  "per_device_train_batch_size": 8,
+  "per_device_eval_batch_size": 8,
+  "gradient_accumulation_steps": 4,
+  
+  "learning_rate": 0.0001,
+  "num_train_epochs": 3,
+  "warmup_ratio": 0.1,
+  
+  "eval_strategy": "steps",
+  "eval_steps": 100,
+  "logging_steps": 100,
+  "save_steps": 500,
+  
+  "bf16": true,
+  "report_to": ["wandb"],
+  "seed": 42
+}
+```
+
+## Dataset Preparation
+
+Format data for instruction following:
+
+```python train.py
+def create_message_column(row):
+    """Convert data to chat format."""
+    messages = []
+    
+    # User message with context and question
+    user = {
+        "content": f"{row['context']}\n Input: {row['question']}",
+        "role": "user"
+    }
+    messages.append(user)
+    
+    # Assistant response
+    assistant = {
+        "content": f"{row['answer']}",
+        "role": "assistant"
+    }
+    messages.append(assistant)
+    
+    return {"messages": messages}
+
+def format_dataset_chatml(row, tokenizer):
+    """Apply chat template."""
+    return {
+        "text": tokenizer.apply_chat_template(
+            row["messages"],
+            add_generation_prompt=False,
+            tokenize=False
+        )
+    }
+
+def process_dataset(model_id: str, train_file: str, test_file: str):
+    """Load and format datasets."""
+    dataset = DatasetDict({
+        "train": Dataset.from_json(train_file),
+        "test": Dataset.from_json(test_file),
+    })
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer.padding_side = "right"
+    
+    # Convert to chat format
+    dataset_chatml = dataset.map(create_message_column)
+    dataset_chatml = dataset_chatml.map(
+        partial(format_dataset_chatml, tokenizer=tokenizer)
+    )
+    
+    return dataset_chatml
+```
+
+**Input Data Format (JSONL):**
+
+```json
+{
+  "context": "Database schema: users(id, name, email)",
+  "question": "Find all user emails",
+  "answer": "SELECT email FROM users"
+}
+```
+
+## Model Loading
+
+Load Phi-3 with optimizations:
+
+```python train.py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+def get_model(model_id: str, device_map):
+    """Load Phi-3 model with optimizations."""
+    # Determine compute dtype
+    if torch.cuda.is_bf16_supported():
+        compute_dtype = torch.bfloat16
+        attn_implementation = "flash_attention_2"
+    else:
+        compute_dtype = torch.float16
+        attn_implementation = "sdpa"
+    
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        trust_remote_code=True,
+        add_eos_token=True,
+        use_fast=True
+    )
+    tokenizer.pad_token = tokenizer.unk_token
+    tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids(
+        tokenizer.pad_token
+    )
+    tokenizer.padding_side = "left"
+    
+    # Load model
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype=compute_dtype,
+        trust_remote_code=True,
+        device_map=device_map,
+        attn_implementation=attn_implementation,
+    )
+    
+    return tokenizer, model
+```
+
+## LoRA Configuration
+
+Configure parameter-efficient fine-tuning:
+
+```python train.py
+from peft import LoraConfig, TaskType
+
+def setup_lora(model_args):
+    """Configure LoRA for Phi-3."""
+    target_modules = [
+        "k_proj",    # Key projection
+        "q_proj",    # Query projection
+        "v_proj",    # Value projection
+        "o_proj",    # Output projection
+        "gate_proj", # Gate projection (MLP)
+        "down_proj", # Down projection (MLP)
+        "up_proj",   # Up projection (MLP)
+    ]
+    
+    peft_config = LoraConfig(
+        r=model_args.lora_r,              # Rank (16)
+        lora_alpha=model_args.lora_alpha,  # Scaling (16)
+        lora_dropout=model_args.lora_dropout, # Dropout (0.05)
+        task_type=TaskType.CAUSAL_LM,
+        target_modules=target_modules,
+    )
+    
+    return peft_config
+```
+
+<Info>
+**LoRA reduces trainable parameters by ~99%** while maintaining performance. For Phi-3 (3.8B params), LoRA trains only ~38M parameters.
+</Info>
+
+## Training Loop
+
+Use TRL's SFTTrainer:
+
+```python train.py
+from trl import SFTTrainer
+from transformers import TrainingArguments, set_seed
+
+def train(config_path: Path):
+    """Train Phi-3 with LoRA."""
+    # Load config
+    model_args, data_args, training_args = get_config(config_path)
+    
+    # Set seed
+    set_seed(training_args.seed)
+    
+    # Prepare dataset
+    dataset_chatml = process_dataset(
+        model_id=model_args.model_id,
+        train_file=data_args.train_file,
+        test_file=data_args.test_file,
+    )
+    
+    # Load model
+    device_map = {"":0}  # Single GPU
+    tokenizer, model = get_model(
+        model_id=model_args.model_id,
+        device_map=device_map
+    )
+    
+    # Configure LoRA
+    peft_config = setup_lora(model_args)
+    
+    # Create SFT trainer
+    trainer = SFTTrainer(
+        model=model,
+        train_dataset=dataset_chatml["train"],
+        eval_dataset=dataset_chatml["test"],
+        peft_config=peft_config,
+        dataset_text_field="text",
+        max_seq_length=512,
+        tokenizer=tokenizer,
+        args=training_args,
+    )
+    
+    # Train
+    trainer.train()
+    trainer.save_model()
+    trainer.create_model_card()
+```
+
+## Inference
+
+Run inference with fine-tuned model:
+
+```python predictor.py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+def load_model(model_path: str):
+    """Load fine-tuned model."""
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+    )
+    return tokenizer, model
+
+def generate(prompt: str, tokenizer, model, max_length=256):
+    """Generate completion."""
+    messages = [{"role": "user", "content": prompt}]
+    
+    # Format with chat template
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+    
+    # Tokenize
+    inputs = tokenizer(text, return_tensors="pt").to(model.device)
+    
+    # Generate
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=max_length,
+        temperature=0.7,
+        top_p=0.9,
+        do_sample=True,
+    )
+    
+    # Decode
+    response = tokenizer.decode(
+        outputs[0][inputs.input_ids.shape[1]:],
+        skip_special_tokens=True
+    )
+    
+    return response
+```
+
+## LLM API Examples
+
+The module includes API examples for different LLM backends:
+
+<Tabs>
+  <Tab title="Phi-3 Local">
+    ```python generative-api/pipeline_phi3.py
+    import torch
+    from transformers import pipeline
+    
+    # Load model
+    pipe = pipeline(
+        "text-generation",
+        model="microsoft/Phi-3-mini-4k-instruct",
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+    )
+    
+    # Generate
+    messages = [
+        {"role": "user", "content": "Write a SQL query"}
+    ]
+    
+    outputs = pipe(
+        messages,
+        max_new_tokens=256,
+        temperature=0.7,
+    )
+    
+    print(outputs[0]["generated_text"])
+    ```
+  </Tab>
+  
+  <Tab title="OpenAI API">
+    ```python generative-api/pipeline_api.py
+    from openai import OpenAI
+    
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "user", "content": "Write a SQL query"}
+        ],
+        temperature=0.7,
+        max_tokens=256,
+    )
+    
+    print(response.choices[0].message.content)
+    ```
+  </Tab>
+</Tabs>
+
+Run API examples:
+
+```bash
+# Local Phi-3
+python generative-api/pipeline_phi3.py ./data/test.json
+
+# OpenAI API
+export OPENAI_API_KEY=your_key
+python generative-api/pipeline_api.py ./data/test.json
+```
+
+## LLM Testing
+
+Test LLM outputs with specialized tools:
+
+<CardGroup cols={2}>
+  <Card title="DeepEval" icon="vial" href="https://github.com/confident-ai/deepeval">
+    LLM evaluation framework with metrics for hallucination, bias, toxicity
+  </Card>
+  <Card title="Promptfoo" icon="terminal" href="https://github.com/promptfoo/promptfoo">
+    Test and evaluate LLM prompts and outputs
+  </Card>
+  <Card title="Ragas" icon="chart-line" href="https://github.com/explodinggradients/ragas">
+    RAG evaluation framework
+  </Card>
+  <Card title="UpTrain" icon="arrow-up" href="https://github.com/uptrain-ai/uptrain">
+    Evaluate and improve LLM applications
+  </Card>
+</CardGroup>
+
+## Distributed Training
+
+Scale to multiple GPUs:
+
+<Tabs>
+  <Tab title="PyTorch DDP">
+    ```bash
+    # Multi-GPU training
+    torchrun --nproc_per_node=4 \
+        generative_example/cli.py train ./conf/example.json
+    ```
+  </Tab>
+  
+  <Tab title="Accelerate">
+    ```bash
+    # Configure accelerate
+    accelerate config
+    
+    # Launch training
+    accelerate launch \
+        generative_example/cli.py train ./conf/example.json
+    ```
+  </Tab>
+  
+  <Tab title="DeepSpeed">
+    ```json deepspeed_config.json
+    {
+      "train_batch_size": 32,
+      "gradient_accumulation_steps": 4,
+      "fp16": {"enabled": true},
+      "zero_optimization": {
+        "stage": 2
+      }
+    }
+    ```
+    
+    ```bash
+    deepspeed --num_gpus=4 \
+        generative_example/cli.py train ./conf/example.json
+    ```
+  </Tab>
+</Tabs>
+
+## Popular LLM Models
+
+<CardGroup cols={2}>
+  <Card title="Phi-3" icon="microsoft" href="https://huggingface.co/microsoft/Phi-3-mini-128k-instruct">
+    3.8B params, MIT license, 128k context
+  </Card>
+  <Card title="Llama 3" icon="meta" href="https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct">
+    8B params, strong performance
+  </Card>
+  <Card title="Mistral 7B" icon="wind" href="https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2">
+    7B params, Apache 2.0 license
+  </Card>
+  <Card title="Gemma 2" icon="google" href="https://huggingface.co/google/gemma-2-9b-it">
+    9B params, commercial use allowed
+  </Card>
+</CardGroup>
+
+Browse the [Open LLM Leaderboard](https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard) for more models.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Phi-3 Cookbook" icon="book" href="https://github.com/microsoft/Phi-3CookBook">
+    Official recipes and examples
+  </Card>
+  <Card title="PEFT Documentation" icon="file-lines" href="https://huggingface.co/docs/peft">
+    Parameter-efficient fine-tuning methods
+  </Card>
+  <Card title="TRL Library" icon="graduation-cap" href="https://huggingface.co/docs/trl">
+    Transformer Reinforcement Learning
+  </Card>
+  <Card title="Distributed Training Guide" icon="network-wired" href="https://huggingface.co/docs/transformers/perf_train_gpu_many">
+    Multi-GPU training strategies
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Practice Exercises" icon="code" href="./practice">
+  Complete hands-on homework assignments
+</Card>

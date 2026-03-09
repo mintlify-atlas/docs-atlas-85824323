@@ -1,0 +1,418 @@
+---
+title: "Monitoring & Observability"
+description: "Track ML system health, detect drift, and debug production issues"
+---
+
+## Why Monitoring is Critical
+
+ML systems fail in unique ways:
+- **Silent degradation**: Accuracy drops but API keeps returning 200 OK
+- **Data drift**: Training data diverges from production data
+- **Concept drift**: The relationship between inputs and outputs changes
+- **Infrastructure issues**: Out of memory, slow inference, rate limiting
+
+Unlike traditional software, ML bugs are often **statistical**—you need specialized monitoring.
+
+## Observability Layers
+
+<CardGroup cols={3}>
+  <Card title="Infrastructure" icon="server">
+    CPU, memory, GPU, network, pod health
+  </Card>
+  <Card title="Application" icon="code">
+    Request rate, latency, errors, throughput
+  </Card>
+  <Card title="ML-Specific" icon="brain">
+    Predictions, confidence scores, feature distributions, drift
+  </Card>
+</CardGroup>
+
+You need all three to understand system health.
+
+## Infrastructure Monitoring
+
+### Prometheus + Grafana
+
+The standard stack for Kubernetes:
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack
+
+kubectl port-forward svc/monitoring-grafana 3000:80
+# Login: admin / prom-operator
+```
+
+**What you get:**
+- Prometheus scrapes metrics from all pods
+- Grafana dashboards for cluster/pod health
+- Alertmanager for notifications
+
+**Key metrics:**
+- **CPU/Memory**: `container_cpu_usage_seconds_total`, `container_memory_usage_bytes`
+- **Network**: `container_network_receive_bytes_total`
+- **Disk**: `kubelet_volume_stats_used_bytes`
+
+<Info>
+Prometheus stores metrics in a time-series database. Use PromQL to query: `rate(container_cpu_usage_seconds_total[5m])`
+</Info>
+
+### GPU Monitoring
+
+GPU metrics aren't exposed by default:
+
+```bash
+helm install nvidia-gpu-exporter nvidia/gpu-exporter
+```
+
+This adds GPU utilization, memory, temperature to Prometheus.
+
+**Custom dashboard:**
+
+```promql
+# GPU utilization
+sum(DCGM_FI_DEV_GPU_UTIL) by (gpu)
+
+# GPU memory used
+sum(DCGM_FI_DEV_FB_USED) by (gpu)
+```
+
+<Note>
+For multi-GPU training, monitor GPU utilization to detect stragglers or imbalanced workloads.
+</Note>
+
+## Application Monitoring
+
+### FastAPI Metrics
+
+Instrument your API with Prometheus client:
+
+```python
+from prometheus_client import Counter, Histogram, generate_latest
+from fastapi import FastAPI, Response
+
+app = FastAPI()
+
+request_count = Counter('requests_total', 'Total requests', ['method', 'endpoint'])
+request_latency = Histogram('request_latency_seconds', 'Request latency')
+
+@app.middleware('http')
+async def metrics_middleware(request, call_next):
+    with request_latency.time():
+        response = await call_next(request)
+    request_count.labels(method=request.method, endpoint=request.url.path).inc()
+    return response
+
+@app.get('/metrics')
+def metrics():
+    return Response(generate_latest(), media_type='text/plain')
+```
+
+Prometheus scrapes `/metrics` every 15s.
+
+### OpenTelemetry for Traces
+
+Traces show request flow across services:
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+
+span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint='http://signoz:4318'))
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+@app.post('/predict')
+def predict(request):
+    with tracer.start_as_current_span('predict'):
+        with tracer.start_as_current_span('preprocess'):
+            inputs = preprocess(request)
+        with tracer.start_as_current_span('model_inference'):
+            outputs = model(inputs)
+        with tracer.start_as_current_span('postprocess'):
+            result = postprocess(outputs)
+    return result
+```
+
+Traces show which span is slow (preprocessing vs inference vs postprocessing).
+
+## LLM Observability
+
+LLMs need special monitoring:
+
+### OpenLLMetry (Traceloop)
+
+Automatically traces LLM calls:
+
+```python
+from traceloop.sdk import Traceloop
+
+Traceloop.init(api_endpoint='http://localhost:4318')
+
+# Now all OpenAI/Anthropic calls are traced
+import openai
+response = openai.ChatCompletion.create(
+    model='gpt-4',
+    messages=[{'role': 'user', 'content': 'Explain ML monitoring'}]
+)
+```
+
+**Captured data:**
+- Prompt and completion
+- Token counts
+- Latency
+- Model and parameters
+
+### LangChain Tracing
+
+```python
+import os
+os.environ['LANGCHAIN_TRACING_V2'] = 'true'
+os.environ['LANGCHAIN_API_KEY'] = 'lsv2_...'
+
+from langchain.chains import LLMChain
+chain = LLMChain(...)
+result = chain.run('query')  # Automatically traced
+```
+
+LangSmith (LangChain's platform) shows:
+- Chain execution graph
+- Intermediate steps
+- Errors and retries
+
+<Info>
+For production, use SigNoz (open-source) or Datadog/New Relic (managed) to aggregate traces from all services.
+</Info>
+
+## SigNoz for Unified Observability
+
+SigNoz combines metrics, traces, and logs:
+
+```bash
+helm repo add signoz https://charts.signoz.io
+helm install my-release signoz/signoz
+
+kubectl port-forward svc/my-release-signoz-frontend 3301:3301
+kubectl port-forward svc/my-release-signoz-otel-collector 4318:4318
+```
+
+Now send traces via OTLP:
+
+```python
+export TRACELOOP_BASE_URL="http://localhost:4318"
+```
+
+**Features:**
+- Trace aggregation and search
+- APM (application performance monitoring)
+- Custom dashboards
+- Alerts
+
+<Note>
+SigNoz is like open-source Datadog. Use it if you want full control. For managed solutions, consider Honeycomb or Datadog.
+</Note>
+
+## Data Drift Detection
+
+### Evidently
+
+Evidently compares reference (training) and current (production) data:
+
+```python
+from evidently.report import Report
+from evidently.metrics import DataDriftTable
+
+report = Report(metrics=[DataDriftTable()])
+report.run(reference_data=train_df, current_data=prod_df)
+report.save_html('drift_report.html')
+```
+
+**Drift types:**
+- **Feature drift**: Input distributions change (e.g., user demographics shift)
+- **Prediction drift**: Output distributions change (e.g., suddenly predicting 90% negative)
+- **Concept drift**: Input-output relationship changes (e.g., "good" review now has different language)
+
+<Info>
+Schedule drift reports daily/weekly. Alert if drift score exceeds threshold.
+</Info>
+
+### WhyLogs
+
+WhyLogs profiles data in production:
+
+```python
+import whylogs as why
+
+result = why.log(pandas=prod_df)
+profile = result.profile()
+profile.view().to_pandas()  # Summary statistics
+```
+
+**Use case:**
+- Log profiles (not raw data) to save storage
+- Compare profiles across time
+- Detect anomalies (outliers, nulls, type changes)
+
+### Alibi Detect
+
+Alibi Detect provides algorithms for drift and outlier detection:
+
+```python
+from alibi_detect.cd import TabularDrift
+
+cd = TabularDrift(x_ref=X_train, p_val=0.05)
+preds = cd.predict(X_prod)
+if preds['data']['is_drift']:
+    print('Drift detected!')
+```
+
+**Methods:**
+- Kolmogorov-Smirnov test
+- Chi-squared test
+- Maximum Mean Discrepancy (MMD)
+
+<Note>
+For high-dimensional data (images, embeddings), use MMD or learned drift detectors instead of univariate tests.
+</Note>
+
+## Seldon Core v2 for Advanced Monitoring
+
+Seldon Core v2 integrates outlier/drift detection into serving:
+
+```yaml
+apiVersion: mlops.seldon.io/v1alpha1
+kind: Model
+metadata:
+  name: income-model
+spec:
+  storageUri: s3://bucket/income-model
+---
+apiVersion: mlops.seldon.io/v1alpha1
+kind: Model
+metadata:
+  name: income-drift
+spec:
+  storageUri: s3://bucket/drift-detector
+---
+apiVersion: mlops.seldon.io/v1alpha1
+kind: Pipeline
+metadata:
+  name: income-pipeline
+spec:
+  steps:
+  - name: drift-check
+    model: income-drift
+  - name: prediction
+    model: income-model
+    inputs: [drift-check.outputs]
+```
+
+Requests flow through drift detector before prediction. If drift is detected, Seldon logs it (or blocks the request).
+
+<Info>
+Seldon v2 is powerful but complex to set up. Use it for regulated industries (finance, healthcare) where explainability and monitoring are critical.
+</Info>
+
+## Model Performance Monitoring
+
+Track prediction quality over time:
+
+```python
+import wandb
+
+wandb.init(project='production-monitoring')
+
+for batch in production_stream:
+    predictions = model.predict(batch.inputs)
+    
+    # Log predictions
+    wandb.log({
+        'mean_confidence': predictions.mean(),
+        'prediction_distribution': wandb.Histogram(predictions)
+    })
+    
+    # If labels arrive later (e.g., user feedback)
+    if batch.labels:
+        accuracy = (predictions == batch.labels).mean()
+        wandb.log({'accuracy': accuracy})
+```
+
+**Key metrics:**
+- **Confidence distribution**: Shift towards low confidence = model uncertainty
+- **Prediction skew**: Suddenly predicting 95% class A = data drift
+- **Accuracy** (if labels available): Direct measure of performance
+
+<Note>
+For many applications, ground truth labels arrive with delay (e.g., click-through rate measured days later). Use confidence and distribution shifts as early warning signals.
+</Note>
+
+## Alerting
+
+**Prometheus AlertManager:**
+
+```yaml
+groups:
+- name: ml-alerts
+  rules:
+  - alert: HighErrorRate
+    expr: rate(requests_total{status="500"}[5m]) > 0.05
+    for: 5m
+    annotations:
+      summary: "High error rate detected"
+  
+  - alert: SlowInference
+    expr: histogram_quantile(0.95, request_latency_seconds) > 1
+    for: 10m
+    annotations:
+      summary: "95th percentile latency > 1s"
+```
+
+Configure AlertManager to send to Slack/PagerDuty.
+
+**PagerDuty for on-call:**
+
+```python
+import pypd
+
+pypd.api_key = 'your-key'
+pypd.Event.create(data={
+    'routing_key': 'your-routing-key',
+    'event_action': 'trigger',
+    'payload': {
+        'summary': 'Model accuracy dropped below 80%',
+        'severity': 'error',
+        'source': 'monitoring-script'
+    }
+})
+```
+
+## Hands-On Examples
+
+Explore monitoring in [Module 7](/modules/module-7/overview):
+- Set up Prometheus + Grafana on Kubernetes
+- Instrument FastAPI with OpenTelemetry
+- Deploy SigNoz for trace aggregation
+- Detect drift with Evidently and Alibi Detect
+- Configure Seldon Core v2 pipelines
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Production Patterns" href="/concepts/production-patterns" icon="diagram-project">
+    Put it all together
+  </Card>
+  <Card title="Containerization" href="/concepts/containerization" icon="cube">
+    Review deployment basics
+  </Card>
+</CardGroup>
+
+## Further Reading
+
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [OpenTelemetry Python](https://opentelemetry.io/docs/instrumentation/python/)
+- [Evidently AI Docs](https://docs.evidentlyai.com/)
+- [Seldon Core v2](https://docs.seldon.io/projects/seldon-core/en/v2/)

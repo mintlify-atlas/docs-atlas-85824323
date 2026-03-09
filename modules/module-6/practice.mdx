@@ -1,0 +1,431 @@
+---
+title: "Practice Exercises"
+description: "Hands-on practice for Module 6: Optimization"
+---
+
+## Overview
+
+These practice exercises help you apply optimization techniques to real ML systems. Complete the tasks to gain hands-on experience with load testing, autoscaling, async inference, and quantization.
+
+## Key Learning Objectives
+
+- Implement dynamic batching and ensembles
+- Benchmark REST and gRPC performance
+- Apply quantization or pruning
+- Configure horizontal pod autoscaling
+- Implement async inference with queues
+
+---
+
+## H11: Advanced Features & Benchmarking
+
+### Learning Resources
+
+<AccordionGroup>
+  <Accordion title="Required Reading">
+    - [Horizontal Pod Autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+    - [Modal Web endpoints](https://modal.com/docs/guide/webhooks)
+    - [Deploy side-projects at scale - Google Cloud Run](https://alexolivier.me/posts/deploy-container-stateless-cheap-google-cloud-run-serverless/)
+    - [K6 load tests](https://github.com/grafana/k6)
+    - [Locust load tests](https://github.com/locustio/locust)
+    - [Vegeta load tests](https://github.com/tsenart/vegeta)
+    - [ghz - gRPC benchmarking tool](https://github.com/bojand/ghz)
+  </Accordion>
+
+  <Accordion title="Advanced Topics">
+    - [Types of Performance Testing](https://loadninja.com/articles/performance-test-types/)
+    - [Reproducible Performance Metrics for LLM inference](https://www.anyscale.com/blog/reproducible-performance-metrics-for-llm-inference)
+    - [MLPerf Inference: Datacenter Benchmark](https://mlcommons.org/benchmarks/inference-datacenter/)
+    - [MLPerf Inference Benchmark Paper](https://arxiv.org/pdf/1911.02549.pdf)
+    - [ModelMesh Serving](https://kserve.github.io/website/master/modelserving/mms/modelmesh/overview/)
+    - [Machine Learning Deployment: Shadow Mode](https://alexgude.com/blog/machine-learning-deployment-shadow-mode/)
+  </Accordion>
+
+  <Accordion title="Triton & Seldon Features">
+    - [Dynamic Batching](https://github.com/triton-inference-server/tutorials/tree/main/Conceptual_Guide/Part_2-improving_resource_utilization#what-is-dynamic-batching)
+    - [Model Ensembles](https://github.com/triton-inference-server/tutorials/tree/main/Conceptual_Guide/Part_5-Model_Ensembles)
+    - [HTTP/REST and GRPC Protocol](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/protocol/README.html)
+    - [Seldon Pipelines](https://docs.seldon.io/projects/seldon-core/en/v2/contents/pipelines/index.html)
+    - [Why gRPC for Model Serving](https://bentoml.com/blog/3-reasons-for-grpc)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="PR1: Dynamic Request Batching">
+    Implement dynamic request batching for your model server.
+    
+    **Options**: Triton, Seldon, or KServe
+    
+    **Requirements**:
+    - Configure batch size and timeout
+    - Measure throughput improvement
+    - Document configuration
+    - Test with varying load patterns
+    
+    **Example (Triton)**:
+    ```json
+    {
+      "dynamic_batching": {
+        "preferred_batch_size": [8, 16],
+        "max_queue_delay_microseconds": 100
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="PR2: Model Ensemble">
+    Create an ensemble of multiple models.
+    
+    **Options**: Triton, Seldon, or KServe
+    
+    **Requirements**:
+    - Combine at least 2 models
+    - Implement preprocessing/postprocessing
+    - Measure end-to-end latency
+    - Document ensemble logic
+    
+    **Example flow**:
+    ```
+    Input → Preprocessing → Model A → Postprocessing → Output
+                         ↘ Model B ↗
+    ```
+  </Step>
+
+  <Step title="PR3: gRPC Inference">
+    Implement gRPC inference endpoint.
+    
+    **Options**: Triton, Seldon, or KServe
+    
+    **Requirements**:
+    - Implement gRPC server
+    - Create client example
+    - Benchmark vs REST
+    - Document protocol buffers
+    
+    **Compare**:
+    - Request/response size
+    - Latency differences
+    - Throughput improvements
+  </Step>
+
+  <Step title="PR4: Model Server Benchmarking">
+    Comprehensive benchmarking of your model server.
+    
+    **Metrics to report**:
+    - Latency (p50, p95, p99)
+    - Throughput (RPS)
+    - Error rate
+    - Resource utilization (CPU, memory, GPU)
+    
+    **Tools**: Use Locust, k6, or Vegeta
+    
+    **Workloads**:
+    - Low load (10 users)
+    - Medium load (50 users)
+    - High load (100+ users)
+  </Step>
+
+  <Step title="PR5: REST vs gRPC Benchmark">
+    Compare REST and gRPC performance.
+    
+    **Requirements**:
+    - Same model, same hardware
+    - Measure both protocols
+    - Document differences
+    - Provide recommendations
+    
+    **Expected findings**:
+    - Latency comparison
+    - Throughput comparison
+    - When to use each protocol
+  </Step>
+
+  <Step title="PR6: Component-Level Benchmarking">
+    Profile inference by component.
+    
+    **Break down**:
+    - Network latency
+    - Preprocessing time
+    - Model forward pass
+    - Postprocessing time
+    - Serialization overhead
+    
+    **Tools**: Use Python profilers or custom timing
+    
+    **Identify** bottlenecks and optimization opportunities
+  </Step>
+</Steps>
+
+### Deliverables
+
+<CardGroup cols={2}>
+  <Card title="GitHub PRs" icon="github">
+    6 merged pull requests with working code
+  </Card>
+  <Card title="Performance Report" icon="chart-line">
+    Update Google Doc with inference performance metrics and findings
+  </Card>
+</CardGroup>
+
+---
+
+## H12: Scaling Infrastructure & Model
+
+### Learning Resources
+
+<AccordionGroup>
+  <Accordion title="Scaling & Autoscaling">
+    - [Horizontal Pod Autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+    - [Introduction to streaming for data scientists](https://huyenchip.com/2022/08/03/stream-processing-for-data-scientists.html)
+    - [SageMaker Asynchronous inference](https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference.html)
+    - [Three Levels of ML Software](https://ml-ops.org/content/three-levels-of-ml-software)
+    - [KEDA - Event-driven Autoscaling](https://keda.sh/)
+  </Accordion>
+
+  <Accordion title="Message Queues & Async">
+    - [REST vs Messaging for Microservices](https://solace.com/blog/experience-awesomeness-event-driven-microservices/)
+    - [KServe with Kafka](https://kserve.github.io/website/master/modelserving/kafka/kafka/)
+    - [TGI Queue Implementation](https://github.com/huggingface/text-generation-inference/blob/main/router/src/queue.rs)
+    - [Triton Pending Request Metrics](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/metrics.html)
+    - [Seldon and Kafka](https://docs.seldon.io/projects/seldon-core/en/v2/contents/architecture/index.html)
+  </Accordion>
+
+  <Accordion title="Hardware Accelerators">
+    - [Meta MTIA v1 Accelerator](https://ai.meta.com/blog/meta-training-inference-accelerator-AI-MTIA/)
+    - [Cloud TPU v5e](https://cloud.google.com/tpu/docs/v5e-inference-converter)
+    - [AWS Inferentia](https://aws.amazon.com/blogs/aws/category/artificial-intelligence/aws-inferentia/)
+    - [AI Accelerators Overview](https://www.youtube.com/watch?v=VQoyypYTz2U)
+  </Accordion>
+
+  <Accordion title="Model Optimization">
+    - [Model Compression Projects](https://awesomeopensource.com/projects/model-compression)
+    - [FastFormers](https://github.com/microsoft/fastformers)
+    - [distil-whisper](https://github.com/huggingface/distil-whisper)
+    - [DistilBERT](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation)
+    - [S-LoRA](https://github.com/S-LoRA/S-LoRA)
+    - [TensorFlow Pruning API](https://blog.tensorflow.org/2019/05/tf-model-optimization-toolkit-pruning-API.html)
+    - [SparseML](https://github.com/neuralmagic/sparseml)
+    - [Intel Neural Compressor](https://github.com/intel/neural-compressor)
+    - [HF Quantization](https://huggingface.co/docs/transformers/quantization)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="PR1: Horizontal Pod Autoscaling">
+    Configure HPA for your model server pod.
+    
+    **Requirements**:
+    - Set resource requests/limits
+    - Configure HPA with CPU/memory targets
+    - Test scaling under load
+    - Document scaling behavior
+    
+    **Validation**:
+    - Pods scale up under load
+    - Pods scale down when idle
+    - Scaling happens within reasonable time
+    - No service disruption during scaling
+  </Step>
+
+  <Step title="PR2: Async Inference with Queue">
+    Implement asynchronous inference using message queue.
+    
+    **Options**: Kafka, SQS, RabbitMQ, Redis
+    
+    **Requirements**:
+    - Submit job endpoint
+    - Status check endpoint
+    - Worker(s) processing queue
+    - Results storage
+    - Error handling
+    
+    **Architecture**:
+    ```
+    API → Queue → Worker → Model → Results DB
+    ```
+  </Step>
+
+  <Step title="PR3: Model Optimization">
+    Optimize inference speed using quantization, pruning, or distillation.
+    
+    **Choose one or more**:
+    - **Quantization**: INT8, INT4, FP16
+    - **Pruning**: Remove unimportant weights
+    - **Distillation**: Train smaller model
+    
+    **Requirements**:
+    - Apply optimization technique
+    - Measure performance improvement
+    - Validate accuracy retention
+    - Document trade-offs
+  </Step>
+
+  <Step title="PR4: Post-Optimization Benchmarking">
+    Benchmark optimized model vs baseline.
+    
+    **Compare**:
+    - Latency (p50, p95, p99)
+    - Throughput (RPS)
+    - Model size
+    - Memory usage
+    - Accuracy metrics
+    - Cost per 1000 requests
+    
+    **Document**:
+    - Performance improvements
+    - Accuracy impact
+    - Cost savings
+    - Recommendations
+  </Step>
+</Steps>
+
+### Deliverables
+
+<CardGroup cols={2}>
+  <Card title="GitHub PRs" icon="github">
+    4 merged pull requests with working implementations
+  </Card>
+  <Card title="Optimization Report" icon="file-chart-column">
+    Update Google Doc with model optimization results and performance comparisons
+  </Card>
+</CardGroup>
+
+---
+
+## Evaluation Criteria
+
+### H11 Criteria
+
+<Tabs>
+  <Tab title="Code Quality">
+    - Clean, documented code
+    - Proper error handling
+    - Production-ready configuration
+    - Tests included
+  </Tab>
+  
+  <Tab title="Performance">
+    - Benchmarks completed
+    - Results documented
+    - Metrics clearly reported
+    - Comparisons provided
+  </Tab>
+  
+  <Tab title="Documentation">
+    - Clear setup instructions
+    - Architecture diagrams
+    - Configuration explained
+    - Trade-offs discussed
+  </Tab>
+</Tabs>
+
+### H12 Criteria
+
+<Tabs>
+  <Tab title="Functionality">
+    - All features working
+    - Autoscaling tested
+    - Queue implementation complete
+    - Optimization applied
+  </Tab>
+  
+  <Tab title="Performance">
+    - Measurable improvements
+    - Thorough benchmarking
+    - Realistic load testing
+    - Cost analysis
+  </Tab>
+  
+  <Tab title="Analysis">
+    - Results interpreted
+    - Trade-offs identified
+    - Recommendations provided
+    - Production readiness assessed
+  </Tab>
+</Tabs>
+
+---
+
+## Tips for Success
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Get basic implementation working before adding complexity
+  </Card>
+  <Card title="Measure Everything" icon="ruler">
+    Collect metrics before and after each optimization
+  </Card>
+  <Card title="Document As You Go" icon="pen">
+    Write documentation while implementing, not after
+  </Card>
+  <Card title="Test Realistically" icon="flask">
+    Use production-like data and traffic patterns
+  </Card>
+</CardGroup>
+
+### Common Pitfalls
+
+<Warning>
+**Avoid these mistakes:**
+
+1. **Not setting resource requests** - HPA requires resource requests to work
+2. **Testing on laptop** - Performance characteristics differ from production
+3. **Ignoring accuracy** - Always validate model accuracy after optimization
+4. **Over-optimizing early** - Measure first, optimize bottlenecks second
+5. **Forgetting error cases** - Test failure scenarios and recovery
+</Warning>
+
+### Recommended Workflow
+
+1. **Baseline**: Establish baseline metrics
+2. **Implement**: Add feature/optimization
+3. **Measure**: Benchmark new configuration
+4. **Compare**: Analyze differences
+5. **Document**: Record findings
+6. **Iterate**: Refine based on results
+
+---
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Office Hours" icon="comments">
+    Attend office hours for guidance and troubleshooting
+  </Card>
+  <Card title="Discussion Forum" icon="users">
+    Ask questions and share learnings with classmates
+  </Card>
+  <Card title="Documentation" icon="book">
+    Reference official docs for tools and frameworks
+  </Card>
+  <Card title="Examples" icon="code">
+    Check module source code for working examples
+  </Card>
+</CardGroup>
+
+---
+
+## Submission
+
+When you're ready to submit:
+
+1. **Ensure all PRs are merged** to your repository
+2. **Update the Google Doc** with:
+   - Performance metrics and benchmarks
+   - Optimization results and analysis
+   - Architecture decisions and trade-offs
+   - Recommendations for production
+3. **Tag your submission** with `module-6-complete`
+4. **Notify instructor** via course platform
+
+<Check>
+**Ready to submit?** Double-check you have:
+- ✅ All required PRs merged
+- ✅ Performance metrics documented
+- ✅ Optimization results analyzed
+- ✅ Clear recommendations provided
+</Check>

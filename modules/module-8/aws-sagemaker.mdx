@@ -1,0 +1,445 @@
+---
+title: "AWS SageMaker Multi-Model Endpoints"
+description: "Deploy multiple models behind a single endpoint for cost-efficient inference"
+---
+
+## Overview
+
+AWS SageMaker Multi-Model Endpoints (MME) allow you to host multiple models behind a single endpoint, optimizing costs and simplifying infrastructure management. Models are dynamically loaded and unloaded based on traffic patterns.
+
+<Info>
+**Key Benefits:**
+- Reduce hosting costs by sharing resources across models
+- Simplify infrastructure (one endpoint instead of many)
+- Dynamic model loading/unloading based on traffic
+- Support for thousands of models
+</Info>
+
+## Architecture
+
+Multi-model endpoints use a shared serving container that loads models from S3 on-demand:
+
+```
+┌─────────────────────────────────────────┐
+│         Client Applications              │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│   SageMaker Multi-Model Endpoint        │
+│   ┌──────────────────────────────────┐  │
+│   │  Model Cache (In Memory)         │  │
+│   │  - model_v0.tar.gz (loaded)      │  │
+│   │  - model_v1.tar.gz (loaded)      │  │
+│   └──────────────────────────────────┘  │
+│                 ▲                        │
+│   ┌─────────────┴─────────────┐         │
+│   │  Triton Inference Server  │         │
+│   └───────────────────────────┘         │
+└──────────────┬──────────────────────────┘
+               │ Load models on demand
+               ▼
+┌─────────────────────────────────────────┐
+│         S3 Model Repository             │
+│  s3://bucket/models/                    │
+│    ├── add_sub_v0.tar.gz               │
+│    ├── triton-serve-pt_v0.tar.gz       │
+│    └── ... (thousands more)            │
+└─────────────────────────────────────────┘
+```
+
+## Implementation
+
+The module includes a Python CLI tool for managing multi-model endpoints.
+
+### Configuration
+
+Define your settings using Pydantic:
+
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    role: str = "arn:aws:iam::ACCOUNT_ID:role/sagemaker-execution-role"
+    model_data_url: str = "s3://sagemaker-REGION-ACCOUNT_ID/models/"
+    bucket_name: str = "sagemaker-REGION-ACCOUNT_ID"
+    mme_triton_image_uri: str = (
+        "785573368785.dkr.ecr.us-east-1.amazonaws.com/"
+        "sagemaker-tritonserver:22.07-py3"
+    )
+    model_name: str = "sagemaker-poc"
+    endpoint_config_name: str = "sagemaker-poc"
+    endpoint_name: str = "sagemaker-poc"
+```
+
+<Note>
+Replace `ACCOUNT_ID` and `REGION` with your AWS account details.
+</Note>
+
+### Step 1: Create Multi-Model Endpoint
+
+Create the endpoint infrastructure:
+
+```bash
+python cli.py create-endpoint
+```
+
+This command:
+1. **Creates a SageMaker model** with multi-model mode
+2. **Creates an endpoint configuration** with instance type and scaling settings
+3. **Deploys the endpoint** and waits for it to be ready
+
+<CodeGroup>
+
+```python Code Implementation
+def create_endpoint():
+    sm_client = boto3.client(service_name="sagemaker")
+
+    # Step 1: Create model with MultiModel mode
+    container = {
+        "Image": settings.mme_triton_image_uri,
+        "ModelDataUrl": settings.model_data_url,
+        "Mode": "MultiModel",  # Enable multi-model mode
+    }
+    create_model_response = sm_client.create_model(
+        ModelName=settings.model_name,
+        ExecutionRoleArn=settings.role,
+        PrimaryContainer=container,
+    )
+
+    # Step 2: Create endpoint configuration
+    create_endpoint_config_response = sm_client.create_endpoint_config(
+        EndpointConfigName=settings.endpoint_config_name,
+        ProductionVariants=[
+            {
+                "InstanceType": "ml.g5.xlarge",  # GPU instance
+                "InitialVariantWeight": 1,
+                "InitialInstanceCount": 1,
+                "ModelName": settings.model_name,
+                "VariantName": "AllTraffic",
+            }
+        ],
+    )
+
+    # Step 3: Create endpoint
+    create_endpoint_response = sm_client.create_endpoint(
+        EndpointName=settings.endpoint_name,
+        EndpointConfigName=settings.endpoint_config_name,
+    )
+```
+
+```bash AWS CLI Equivalent
+# Create model
+aws sagemaker create-model \
+    --model-name sagemaker-poc \
+    --execution-role-arn arn:aws:iam::ACCOUNT_ID:role/sagemaker-execution-role \
+    --primary-container '{"Image":"785573368785.dkr.ecr.us-east-1.amazonaws.com/sagemaker-tritonserver:22.07-py3","ModelDataUrl":"s3://bucket/models/","Mode":"MultiModel"}'
+
+# Create endpoint config
+aws sagemaker create-endpoint-config \
+    --endpoint-config-name sagemaker-poc \
+    --production-variants '[{"InstanceType":"ml.g5.xlarge","InitialVariantWeight":1,"InitialInstanceCount":1,"ModelName":"sagemaker-poc","VariantName":"AllTraffic"}]'
+
+# Create endpoint
+aws sagemaker create-endpoint \
+    --endpoint-name sagemaker-poc \
+    --endpoint-config-name sagemaker-poc
+```
+
+</CodeGroup>
+
+### Step 2: Add Models to Endpoint
+
+Add models to the shared S3 location:
+
+```bash
+# Add a simple add/subtract model
+python cli.py add-model ./model_registry/add_sub/ add_sub_v0.tar.gz
+
+# Add a PyTorch image model
+python cli.py add-model ./model_registry/triton-serve-pt/ triton-serve-pt_v0.tar.gz
+```
+
+<Info>
+For Triton models, you need the [Python backend repository](https://github.com/triton-inference-server/python_backend) structure in your model_registry.
+</Info>
+
+The `add-model` function:
+1. Creates a tarball of your model directory
+2. Uploads it to S3 in the models prefix
+3. Returns the S3 URI
+
+```python
+def add_model(model_directory: str, tarball_name: str):
+    s3_key = f"models/{tarball_name}"
+
+    # Create tarball
+    with tarfile.open(tarball_name, "w:gz") as tar:
+        tar.add(model_directory, arcname=os.path.basename(model_directory))
+    console.print(f"Created tarball: {tarball_name}")
+
+    # Upload to S3
+    s3_client = boto3.client("s3")
+    s3_client.upload_file(
+        tarball_name, settings.bucket_name, f"models/{tarball_name}"
+    )
+    console.print(f"Uploaded model to: s3://{settings.bucket_name}/{s3_key}")
+    return f"s3://{settings.bucket_name}/{s3_key}"
+```
+
+### Step 3: Verify Models in S3
+
+Check that models are uploaded correctly:
+
+```bash
+aws s3 ls s3://sagemaker-REGION-ACCOUNT_ID/models/
+```
+
+Expected output:
+```
+2024-01-15 10:30:45    1024576 add_sub_v0.tar.gz
+2024-01-15 10:31:12    5242880 triton-serve-pt_v0.tar.gz
+```
+
+### Step 4: Invoke Models
+
+Call specific models by name using the `TargetModel` parameter:
+
+<CodeGroup>
+
+```bash Image Model
+# Invoke PyTorch image classification model
+python cli.py call-model-image triton-serve-pt_v0.tar.gz
+```
+
+```bash Vector Model
+# Invoke simple add/subtract model
+python cli.py call-model-vector add_sub_v0.tar.gz
+```
+
+</CodeGroup>
+
+Inference implementation:
+
+```python
+def _call_model(target_model: str, payload: Any):
+    runtime_sm_client = boto3.client("sagemaker-runtime")
+    
+    response = runtime_sm_client.invoke_endpoint(
+        EndpointName=settings.endpoint_name,
+        ContentType="application/octet-stream",
+        Body=json.dumps(payload),
+        TargetModel=target_model,  # Specify which model to use
+    )
+
+    response = json.loads(response["Body"].read().decode("utf8"))
+    output = response["outputs"][0]["data"]
+    console.print(output)
+```
+
+### Example Payloads
+
+<CodeGroup>
+
+```python Image Classification
+# Prepare image input (224x224x3)
+img = np.random.rand(224, 224, 3).astype(np.float32)
+
+# Normalize
+img = img - np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+img = img / np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+
+# Transpose to (C, H, W)
+img = np.transpose(img, (2, 0, 1))
+
+payload = {
+    "inputs": [
+        {
+            "name": "INPUT__0",
+            "shape": [1, 3, 224, 224],
+            "datatype": "FP32",
+            "data": img.tolist(),
+        }
+    ]
+}
+```
+
+```python Vector Input
+payload = {
+    "inputs": [
+        {
+            "name": "INPUT0",
+            "shape": [4],
+            "datatype": "FP32",
+            "data": [1, 2, 3, 4],
+        },
+        {
+            "name": "INPUT1",
+            "shape": [4],
+            "datatype": "FP32",
+            "data": [1, 2, 3, 4],
+        },
+    ]
+}
+```
+
+</CodeGroup>
+
+## Cleanup
+
+Remove all SageMaker resources:
+
+```bash
+bash ./sagemaker-multimodal/clean.sh
+```
+
+The cleanup script:
+1. Deletes all endpoints
+2. Deletes all endpoint configurations
+3. Deletes all models
+4. Removes S3 objects
+
+<CodeGroup>
+
+```bash cleanup.sh
+#!/bin/bash
+
+# Delete endpoints
+for endpoint in $(aws sagemaker list-endpoints --query "Endpoints[*].EndpointName" --output text); do
+    aws sagemaker delete-endpoint --endpoint-name $endpoint
+    echo "Deleted endpoint: $endpoint"
+done
+
+# Delete endpoint configurations
+for endpoint_config in $(aws sagemaker list-endpoint-configs --query "EndpointConfigs[*].EndpointConfigName" --output text); do
+    aws sagemaker delete-endpoint-config --endpoint-config-name $endpoint_config
+    echo "Deleted endpoint config: $endpoint_config"
+done
+
+# Delete models
+for model in $(aws sagemaker list-models --query "Models[*].ModelName" --output text); do
+    aws sagemaker delete-model --model-name $model
+    echo "Deleted model: $model"
+done
+
+# Clean S3
+aws s3 rm s3://sagemaker-REGION-ACCOUNT_ID --recursive
+```
+
+</CodeGroup>
+
+<Warning>
+The cleanup script removes ALL SageMaker resources in your account. Use with caution in production environments.
+</Warning>
+
+## Cost Optimization
+
+Multi-model endpoints provide significant cost savings:
+
+### Without MME (Dedicated Endpoints)
+```
+10 models × ml.g5.xlarge ($1.41/hour) = $14.10/hour
+Monthly cost: ~$10,152
+```
+
+### With MME (Shared Endpoint)
+```
+1 endpoint × ml.g5.xlarge ($1.41/hour) = $1.41/hour
+Monthly cost: ~$1,015
+
+Savings: ~90%
+```
+
+<Info>
+MMEs are ideal when:
+- You have many models with low-to-moderate traffic
+- Models can share resources (same framework/container)
+- You can tolerate cold start latency for infrequently used models
+</Info>
+
+## Advanced Features
+
+### Asynchronous Inference
+
+Combine MME with async inference for long-running predictions:
+
+```python
+response = sm_client.invoke_endpoint_async(
+    EndpointName=endpoint_name,
+    InputLocation=f"s3://{bucket}/input/{request_id}.json",
+    TargetModel=model_name,
+)
+
+# Poll for results
+output_location = response["OutputLocation"]
+```
+
+### Monitoring
+
+Enable SageMaker Model Monitor to track:
+- Model invocation metrics (latency, throughput)
+- Model loading/unloading patterns
+- Error rates per model
+- Resource utilization
+
+```python
+from sagemaker.model_monitor import ModelMonitor
+
+monitor = ModelMonitor(
+    role=role,
+    instance_count=1,
+    instance_type="ml.m5.xlarge",
+    max_runtime_in_seconds=3600,
+)
+
+monitor.create_monitoring_schedule(
+    endpoint_input=endpoint_name,
+    output_s3_uri=f"s3://{bucket}/monitoring",
+)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Model fails to load">
+    **Symptoms:** `ModelNotReadyException` or timeout errors
+    
+    **Solutions:**
+    - Check model tarball structure (must match Triton format)
+    - Verify S3 permissions for endpoint role
+    - Increase endpoint instance size for large models
+    - Check CloudWatch logs for detailed error messages
+  </Accordion>
+  
+  <Accordion title="High latency for first request">
+    **Symptoms:** First request takes 10-30+ seconds
+    
+    **Solutions:**
+    - Expected behavior (cold start for model loading)
+    - Use async inference for long-running predictions
+    - Keep frequently-used models "warm" with periodic requests
+    - Consider dedicated endpoints for latency-critical models
+  </Accordion>
+  
+  <Accordion title="OutOfMemory errors">
+    **Symptoms:** Endpoint fails when loading many models
+    
+    **Solutions:**
+    - Reduce model sizes (quantization, pruning)
+    - Increase instance size (more GPU/CPU memory)
+    - Implement model versioning to remove old versions
+    - Monitor memory usage with CloudWatch
+  </Accordion>
+</AccordionGroup>
+
+## Further Reading
+
+- [SageMaker Multi-Model Endpoints Documentation](https://docs.aws.amazon.com/sagemaker/latest/dg/multi-model-endpoints.html)
+- [Create a Multi-Model Endpoint](https://docs.aws.amazon.com/sagemaker/latest/dg/create-multi-model-endpoint.html)
+- [Multi-Model Endpoints on GPU](https://aws.amazon.com/blogs/machine-learning/run-multiple-deep-learning-models-on-gpu-with-amazon-sagemaker-multi-model-endpoints/)
+- [SageMaker Asynchronous Inference](https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference.html)
+- [SageMaker Model Monitor](https://docs.aws.amazon.com/sagemaker/latest/dg/model-monitor.html)
+
+<Card title="Next: Practice Exercise" icon="arrow-right" href="./practice">
+  Apply your knowledge by deploying multi-model endpoints on AWS and GCP
+</Card>

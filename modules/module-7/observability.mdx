@@ -1,0 +1,384 @@
+---
+title: "LLM Observability"
+description: "Instrument LLM applications with OpenTelemetry and specialized observability tools"
+---
+
+# LLM Observability
+
+Observability for Large Language Model applications requires specialized tooling to track token usage, latency, multi-step reasoning chains, and costs. This guide covers how to instrument your LLM applications with modern observability platforms.
+
+## Why LLM Observability Matters
+
+LLM applications present unique monitoring challenges:
+
+- **Variable costs**: Each request has different token usage and costs
+- **Long latency**: Responses can take seconds to minutes
+- **Complex workflows**: Multi-step reasoning, tool use, and retrieval
+- **Non-determinism**: Same input can produce different outputs
+- **Quality assessment**: Correctness is harder to evaluate automatically
+
+<Warning>
+Without proper observability, you can't debug failures, optimize costs, or improve quality in production LLM applications.
+</Warning>
+
+## OpenTelemetry Basics
+
+[OpenTelemetry](https://opentelemetry.io/) provides a vendor-neutral standard for collecting telemetry data:
+
+- **Traces**: Request flows through distributed systems
+- **Metrics**: Numerical measurements over time
+- **Logs**: Discrete events with context
+
+### Key Concepts
+
+<AccordionGroup>
+  <Accordion title="Spans and Traces">
+    A **trace** represents a request's journey through your system. It's composed of **spans**, where each span represents a unit of work (e.g., an API call, database query, or LLM inference).
+    
+    Spans can be nested to show parent-child relationships, making it easy to see which operations take the most time.
+  </Accordion>
+  
+  <Accordion title="Context Propagation">
+    OpenTelemetry automatically propagates context across service boundaries, so you can trace a request through multiple microservices and see the complete picture.
+  </Accordion>
+  
+  <Accordion title="Attributes and Events">
+    You can attach **attributes** (key-value pairs) to spans to add context, like model name, prompt length, or token count. **Events** mark specific points in time within a span.
+  </Accordion>
+</AccordionGroup>
+
+## Observability Platforms
+
+This module demonstrates three observability platforms for LLM applications:
+
+### 1. AgentOps
+
+[AgentOps](https://www.agentops.ai/) specializes in monitoring AI agents:
+
+```python
+import agentops
+from openai import OpenAI
+
+# Initialize AgentOps
+agentops.init()
+
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# End session
+agentops.end_all_sessions()
+```
+
+**Features:**
+- Automatic tracking of OpenAI calls
+- Agent workflow visualization
+- Cost tracking per session
+- Simple integration with no code changes
+
+### 2. LangSmith
+
+[LangSmith](https://www.langchain.com/langsmith) from LangChain provides detailed tracing:
+
+```python
+from langsmith.wrappers import wrap_openai
+import openai
+import os
+
+# Set environment variables
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = "lsv2_..."
+
+# Wrap OpenAI client
+client = wrap_openai(openai.Client())
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+**Features:**
+- Detailed trace trees for complex chains
+- Prompt and response logging
+- Evaluation and testing tools
+- Dataset management
+
+### 3. OpenLLMetry
+
+[OpenLLMetry](https://github.com/traceloop/openllmetry) (Traceloop) uses OpenTelemetry standards:
+
+```python
+from traceloop.sdk import Traceloop
+from traceloop.sdk.decorators import workflow
+import openai
+import os
+
+# Configure OpenTelemetry endpoint
+os.environ["TRACELOOP_BASE_URL"] = "http://localhost:4318"
+
+# Initialize Traceloop
+Traceloop.init(app_name="my-llm-app")
+
+client = openai.Client()
+
+@workflow(name="chat_completion")
+def get_completion(prompt: str) -> str:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
+result = get_completion("Tell me a joke")
+```
+
+**Features:**
+- OpenTelemetry compatible (works with any backend)
+- Automatic instrumentation for popular frameworks
+- Custom workflow decorators
+- Self-hosted option
+
+## Example Applications
+
+The module includes two reference applications:
+
+### Text-to-SQL Application
+
+Location: `llm-apps/sql_app.py`
+
+This application demonstrates observability across three platforms:
+
+```python
+import agentops
+from openai import OpenAI
+from langsmith.wrappers import wrap_openai
+from traceloop.sdk import Traceloop
+from traceloop.sdk.decorators import workflow
+
+def get_sql(query: str, context: str, client: OpenAI) -> str:
+    """Generate SQL from natural language query."""
+    prompt = f"""
+    Write the corresponding SQL query based on user requests and database context:
+    
+    User requests: {query}
+    Database context: {context}
+    
+    Please return in JSON format: {{"sql": ""}}
+    """
+    
+    chat_completion = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="gpt-4o-mini-2024-07-18",
+        response_format={"type": "json_object"},
+    )
+    
+    return json.loads(chat_completion.choices[0].message.content)["sql"]
+
+# Test with AgentOps
+agentops.init()
+client_agentops = OpenAI()
+result = get_sql(query=sql_prompt, context=sql_context, client=client_agentops)
+agentops.end_all_sessions()
+
+# Test with LangSmith
+client_lang_smith = wrap_openai(OpenAI())
+result = get_sql(query=sql_prompt, context=sql_context, client=client_lang_smith)
+
+# Test with OpenLLMetry
+Traceloop.init(app_name="text2sql")
+client_traceloop = OpenAI()
+get_sql_traceloop = workflow(name="get_sql")(get_sql)
+result = get_sql_traceloop(query=sql_prompt, context=sql_context, client=client_traceloop)
+```
+
+### AI Scientist Paper Reviewer
+
+Location: `llm-apps/reviewer.py`
+
+This demonstrates observability for a complex multi-step reasoning application:
+
+```python
+from ai_scientist.perform_review import load_paper, perform_review
+import openai
+import agentops
+from langsmith.wrappers import wrap_openai
+from traceloop.sdk import Traceloop
+from traceloop.sdk.decorators import workflow
+
+def review_paper(paper_pdf_path: str, client: openai.OpenAI) -> str:
+    """Review a research paper using AI Scientist."""
+    model = "gpt-4o-mini-2024-07-18"
+    paper_txt = load_paper(paper_pdf_path)
+    
+    review = perform_review(
+        paper_txt,
+        model,
+        client,
+        num_reflections=5,
+        num_fs_examples=1,
+        num_reviews_ensemble=5,
+        temperature=0.1,
+    )
+    
+    return f"{review['Overall']}\n{review['Decision']}\n{review['Weaknesses']}"
+```
+
+This multi-step workflow includes:
+- Paper parsing
+- Multiple review iterations
+- Ensemble evaluation
+- Reflection and refinement
+
+## Environment Setup
+
+### Required Environment Variables
+
+```bash
+# OpenAI API
+export OPENAI_API_KEY="sk-proj-****"
+
+# OpenTelemetry endpoint (for OpenLLMetry)
+export TRACELOOP_BASE_URL="http://localhost:4318"
+
+# LangSmith (optional)
+export LANGCHAIN_TRACING_V2=true
+export LANGCHAIN_API_KEY="lsv2_****"
+
+# Python path for AI Scientist
+export PYTHONPATH="llm-apps/AI-Scientist/"
+```
+
+### Running the Examples
+
+<CodeGroup>
+
+```bash Text-to-SQL
+python llm-apps/sql_app.py
+```
+
+```bash Paper Reviewer
+python llm-apps/reviewer.py
+```
+
+</CodeGroup>
+
+## Custom Instrumentation
+
+Add custom spans to track specific operations:
+
+```python
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+def process_data(data):
+    with tracer.start_as_current_span("data_processing") as span:
+        # Add attributes
+        span.set_attribute("data.size", len(data))
+        span.set_attribute("data.type", type(data).__name__)
+        
+        # Add an event
+        span.add_event("Processing started")
+        
+        # Your processing logic
+        result = transform(data)
+        
+        span.add_event("Processing completed")
+        return result
+```
+
+## Workflow Decorators
+
+Use decorators to automatically track functions:
+
+```python
+from traceloop.sdk.decorators import workflow, task
+
+@workflow(name="rag_pipeline")
+def retrieve_and_generate(query: str) -> str:
+    """Complete RAG pipeline."""
+    docs = retrieve_documents(query)
+    context = format_context(docs)
+    return generate_response(query, context)
+
+@task(name="retrieve")
+def retrieve_documents(query: str):
+    # Automatically tracked as a span
+    return vector_db.search(query, top_k=5)
+
+@task(name="generate")
+def generate_response(query: str, context: str):
+    # Also tracked automatically
+    return llm.generate(query=query, context=context)
+```
+
+## Comparing Platforms
+
+| Feature | AgentOps | LangSmith | OpenLLMetry |
+|---------|----------|-----------|-------------|
+| **Auto-instrumentation** | ✅ | ✅ | ✅ |
+| **Cost tracking** | ✅ | ✅ | ❌ |
+| **Custom backends** | ❌ | ❌ | ✅ |
+| **Evaluation tools** | ⚠️ Basic | ✅ Advanced | ❌ |
+| **Self-hosted** | ❌ | ⚠️ Paid | ✅ |
+| **OpenTelemetry** | ❌ | ❌ | ✅ |
+| **LangChain integration** | ⚠️ | ✅ Native | ✅ |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Sample Strategically" icon="filter">
+    Don't trace every request in high-volume production. Use sampling to reduce overhead while maintaining visibility.
+  </Card>
+  
+  <Card title="Add Context" icon="tags">
+    Include user IDs, session IDs, model versions, and other metadata as span attributes for easier debugging.
+  </Card>
+  
+  <Card title="Monitor Costs" icon="dollar-sign">
+    Track token usage and costs per request, user, or feature to optimize spending.
+  </Card>
+  
+  <Card title="Set Alerts" icon="bell">
+    Configure alerts for high latency, error rates, or cost spikes to catch issues early.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Traces not appearing">
+    - Check that `TRACELOOP_BASE_URL` is set correctly
+    - Verify the OpenTelemetry collector is running
+    - Ensure your application has network access to the collector
+    - Check for initialization errors in application logs
+  </Accordion>
+  
+  <Accordion title="Missing span data">
+    - Verify the SDK version is compatible
+    - Check that instrumentation is initialized before creating the client
+    - Ensure exceptions aren't silently caught
+  </Accordion>
+  
+  <Accordion title="High overhead">
+    - Enable sampling to reduce trace volume
+    - Disable detailed logging in production
+    - Use batch exporters instead of synchronous ones
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+- [OpenTelemetry Python Docs](https://opentelemetry.io/docs/instrumentation/python/)
+- [LangSmith Documentation](https://docs.smith.langchain.com/)
+- [OpenLLMetry GitHub](https://github.com/traceloop/openllmetry)
+- [AgentOps Documentation](https://docs.agentops.ai/)
+
+## Next Steps
+
+<Card title="Install SigNoz" icon="arrow-right" href="/modules/module-7/signoz">
+  Set up SigNoz as your observability backend for OpenTelemetry traces
+</Card>

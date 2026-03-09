@@ -1,0 +1,450 @@
+---
+title: "Streamlit UI Serving"
+description: "Build interactive web interfaces for ML models with Streamlit"
+---
+
+## Overview
+
+Streamlit enables rapid development of interactive web UIs for machine learning models without frontend expertise. This implementation supports both single predictions and batch processing.
+
+## Implementation
+
+### Application Structure
+
+The Streamlit app (`serving/ui_app.py`) provides two interfaces:
+
+```python serving/ui_app.py
+import pandas as pd
+import streamlit as st
+from serving.predictor import Predictor
+
+@st.cache_data
+def get_model() -> Predictor:
+    return Predictor.default_from_model_registry()
+
+predictor = get_model()
+
+def main():
+    st.header("UI serving demo")
+    tab1, tab2 = st.tabs(["Single prediction", "Batch prediction"])
+    with tab1:
+        single_pred()
+    with tab2:
+        batch_pred()
+
+if __name__ == "__main__":
+    main()
+```
+
+**Key features:**
+- Model caching with `@st.cache_data` for fast reloads
+- Tabbed interface for different use cases
+- Automatic model loading from W&B registry
+
+## Single Prediction Interface
+
+### Implementation
+
+```python serving/ui_app.py
+def single_pred():
+    input_sent = st.text_input(
+        "Type english sentence",
+        value="This is example input"
+    )
+    if st.button("Run inference"):
+        st.write("Input:", input_sent)
+        pred = predictor.predict([input_sent])
+        st.write("Pred:", pred)
+```
+
+### User Experience
+
+<Steps>
+  <Step title="Enter text">
+    User types or pastes text into the input field
+  </Step>
+  
+  <Step title="Run inference">
+    Click button to trigger prediction
+  </Step>
+  
+  <Step title="View results">
+    Probability distributions displayed immediately
+  </Step>
+</Steps>
+
+**Example output:**
+```
+Input: This is example input
+Pred: [[0.23 0.77]]
+```
+
+## Batch Prediction Interface
+
+### Implementation
+
+```python serving/ui_app.py
+def batch_pred():
+    uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
+    if uploaded_file:
+        dataframe = pd.read_csv(uploaded_file)
+        st.write("Input dataframe")
+        st.write(dataframe)
+        
+        dataframe_with_pred = predictor.run_inference_on_dataframe(dataframe)
+        st.write("Result dataframe")
+        st.write(dataframe_with_pred)
+```
+
+### Batch Predictor Method
+
+```python serving/predictor.py
+def run_inference_on_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+    correct_sentence_conf = []
+    for idx in tqdm(range(len(df))):
+        sentence = df.iloc[idx]["sentence"]
+        conf = self.predict([sentence]).flatten()[1]
+        correct_sentence_conf.append(conf)
+    df["correct_sentence_conf"] = correct_sentence_conf
+    return df
+```
+
+**Features:**
+- Upload CSV files via drag-and-drop
+- Preview input dataframe
+- Progress tracking with `tqdm`
+- Results displayed in interactive table
+
+### Example Usage
+
+**Input CSV:**
+```csv
+sentence
+This is a good example
+This is bad example
+Great work!
+```
+
+**Output:**
+```csv
+sentence,correct_sentence_conf
+This is a good example,0.89
+This is bad example,0.23
+Great work!,0.95
+```
+
+## Local Development
+
+### Using Make
+
+```bash
+make run_app_streamlit
+```
+
+This command:
+1. Builds Docker image with `app-streamlit` target
+2. Runs container on port 8081
+3. Forwards to internal port 8080
+4. Mounts W&B credentials
+
+### Using Docker
+
+```bash
+# Build
+docker build -f Dockerfile \
+  -t app-streamlit:latest \
+  --target app-streamlit .
+
+# Run
+docker run -it -p 8081:8080 \
+  -e WANDB_API_KEY=${WANDB_API_KEY} \
+  app-streamlit:latest
+```
+
+### Access the UI
+
+Open browser to `http://localhost:8081`
+
+## Kubernetes Deployment
+
+### Manifest
+
+```yaml k8s/app-streamlit.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-streamlit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-streamlit
+  template:
+    metadata:
+      labels:
+        app: app-streamlit
+    spec:
+      containers:
+        - name: app-streamlit
+          image: ghcr.io/kyryl-opens-ml/app-streamlit:latest
+          env:
+          - name: WANDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: wandb
+                key: WANDB_API_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-streamlit
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    app: app-streamlit
+```
+
+**Configuration notes:**
+- Single replica (Streamlit maintains session state)
+- ClusterIP service for internal access
+- W&B API key injected from Kubernetes secret
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Create cluster">
+    ```bash
+    kind create cluster --name ml-in-production
+    ```
+  </Step>
+  
+  <Step title="Configure secrets">
+    ```bash
+    export WANDB_API_KEY='your-key'
+    kubectl create secret generic wandb \
+      --from-literal=WANDB_API_KEY=$WANDB_API_KEY
+    ```
+  </Step>
+  
+  <Step title="Deploy application">
+    ```bash
+    kubectl create -f k8s/app-streamlit.yaml
+    ```
+  </Step>
+  
+  <Step title="Monitor deployment">
+    ```bash
+    kubectl get pods -l app=app-streamlit
+    kubectl logs -l app=app-streamlit -f
+    ```
+  </Step>
+  
+  <Step title="Access UI">
+    ```bash
+    kubectl port-forward --address 0.0.0.0 svc/app-streamlit 8080:8080
+    ```
+    
+    Open `http://localhost:8080` in browser
+  </Step>
+</Steps>
+
+## Caching Strategy
+
+### Model Caching
+
+```python
+@st.cache_data
+def get_model() -> Predictor:
+    return Predictor.default_from_model_registry()
+```
+
+**Benefits:**
+- Model loads once per session
+- Faster page reloads during development
+- Shared across all users in production
+
+<Warning>
+Use `@st.cache_resource` for models in production to share state across sessions.
+</Warning>
+
+### Best Practice
+
+```python
+@st.cache_resource
+def get_model() -> Predictor:
+    return Predictor.default_from_model_registry()
+```
+
+Differences:
+- `cache_data`: Serializes return value (slower, safer)
+- `cache_resource`: Shares object reference (faster, use for models)
+
+## Testing Streamlit Apps
+
+Streamlit provides testing utilities:
+
+```python tests/test_ui_app.py
+from streamlit.testing.v1 import AppTest
+
+def test_single_prediction():
+    at = AppTest.from_file("serving/ui_app.py")
+    at.run()
+    
+    # Simulate user input
+    at.text_input[0].set_value("test sentence").run()
+    at.button[0].click().run()
+    
+    # Assert output appears
+    assert "Pred:" in at.text[0].value
+
+def test_batch_prediction():
+    at = AppTest.from_file("serving/ui_app.py")
+    at.run()
+    
+    # Upload file
+    at.file_uploader[0].upload_file("test.csv").run()
+    
+    # Check results displayed
+    assert "correct_sentence_conf" in at.dataframe[1].value.columns
+```
+
+## Production Considerations
+
+### Session State
+
+<Warning>
+Streamlit maintains per-user session state. Scale horizontally with sticky sessions.
+</Warning>
+
+**Configuration for load balancers:**
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.kubernetes.io/session-affinity: ClientIP
+spec:
+  sessionAffinity: ClientIP
+```
+
+### Performance Optimization
+
+**Fragment caching for components:**
+```python
+@st.cache_data
+def expensive_computation(data):
+    return process(data)
+
+def single_pred():
+    input_sent = st.text_input("Type sentence")
+    if st.button("Run"):
+        result = expensive_computation(input_sent)  # Cached
+        st.write(result)
+```
+
+### Error Handling
+
+Graceful error display:
+
+```python
+def single_pred():
+    input_sent = st.text_input("Type english sentence")
+    if st.button("Run inference"):
+        try:
+            pred = predictor.predict([input_sent])
+            st.success("Prediction complete!")
+            st.write("Pred:", pred)
+        except Exception as e:
+            st.error(f"Prediction failed: {str(e)}")
+            st.exception(e)
+```
+
+## UI Enhancements
+
+### Visualization
+
+Add charts for probability distributions:
+
+```python
+import matplotlib.pyplot as plt
+
+def single_pred():
+    input_sent = st.text_input("Type english sentence")
+    if st.button("Run inference"):
+        pred = predictor.predict([input_sent])[0]
+        
+        # Display as bar chart
+        fig, ax = plt.subplots()
+        ax.bar(["Negative", "Positive"], pred)
+        ax.set_ylabel("Probability")
+        st.pyplot(fig)
+```
+
+### Configuration Sidebar
+
+```python
+def main():
+    st.sidebar.header("Configuration")
+    threshold = st.sidebar.slider(
+        "Confidence threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5
+    )
+    
+    st.header("UI serving demo")
+    # Use threshold in predictions
+```
+
+## Comparison: Streamlit vs Gradio
+
+| Feature | Streamlit | Gradio |
+|---------|-----------|--------|
+| Learning curve | Low | Very low |
+| Customization | High | Limited |
+| Layout control | Excellent | Basic |
+| HuggingFace integration | Manual | Built-in |
+| Deployment | Self-hosted | HF Spaces |
+
+**Choose Streamlit when:**
+- Building internal tools
+- Need custom layouts
+- Require data exploration features
+- Have existing Python codebase
+
+**Choose Gradio when:**
+- Quick demos for HuggingFace
+- Simple input/output interfaces
+- Want hosted deployment
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Caching" icon="bolt">
+    Cache expensive operations with `@st.cache_data`
+  </Card>
+  <Card title="Progress Indicators" icon="spinner">
+    Show `st.spinner()` for long-running tasks
+  </Card>
+  <Card title="Input Validation" icon="shield">
+    Validate user input before processing
+  </Card>
+  <Card title="Error Messages" icon="exclamation">
+    Display helpful errors with `st.error()`
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Triton Inference Server" icon="server" href="/modules/module-5/triton">
+  Deploy high-performance inference with Triton
+</Card>
+
+## Resources
+
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [Streamlit App Gallery](https://streamlit.io/gallery)
+- [Testing Streamlit Apps](https://docs.streamlit.io/library/api-reference/app-testing)
+- [Gradio Quickstart](https://www.gradio.app/guides/quickstart)

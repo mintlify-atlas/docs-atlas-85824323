@@ -1,0 +1,92 @@
+---
+title: "Module 8: Cloud Platforms"
+description: "Explore buy vs build decisions and deploy multi-model endpoints on cloud platforms"
+---
+
+## Overview
+
+This module explores the strategic decisions and practical implementations involved in deploying machine learning systems on cloud platforms. You'll learn how to evaluate different ML platforms, make informed buy vs build decisions, and implement advanced deployment patterns like multi-model endpoints.
+
+## Key Topics
+
+### Buy vs Build Decision Framework
+
+Learn a structured approach to evaluating whether to:
+- Build custom ML infrastructure from scratch
+- Adopt managed ML platforms (AWS SageMaker, GCP Vertex AI, Azure ML)
+- Use hybrid approaches combining both strategies
+
+The decision framework covers:
+- Cost analysis (development, maintenance, operations)
+- Time to market considerations
+- Team expertise and resources
+- Flexibility and customization needs
+- Vendor lock-in risks
+
+### Cloud ML Platforms
+
+Explore the major managed ML platforms:
+
+**AWS SageMaker**
+- End-to-end ML platform for building, training, and deploying models
+- Processing jobs for data preparation
+- Model hosting with various deployment options
+- Integration with AWS ecosystem (S3, RDS, EC2)
+
+**GCP Vertex AI**
+- Unified ML platform on Google Cloud
+- AutoML capabilities
+- Custom training and prediction
+- Integration with Google Cloud services
+
+### Multi-Model Endpoints
+
+Implement advanced deployment patterns that allow hosting multiple models behind a single endpoint:
+- Cost optimization through resource sharing
+- Simplified infrastructure management
+- Dynamic model loading and unloading
+- Support for different model types (image, text, tabular)
+
+## Example AWS MLOps Stack
+
+```
+- Infrastructure: AWS
+- Data Storage: S3 + RDS
+- Experiments: EC2 + SageMaker Processing Jobs
+- Pipelines: MWAA (Managed Workflows for Apache Airflow)
+- Basic Deployment: SageMaker Inference Toolkit
+- Advanced Deployment: Asynchronous Inference + Multi-Model Endpoints
+- Monitoring: SageMaker Model Monitor
+```
+
+## Learning Outcomes
+
+By the end of this module, you will be able to:
+
+1. **Evaluate platforms** using a structured decision framework
+2. **Deploy multi-model endpoints** on AWS SageMaker
+3. **Compare cloud platforms** based on features, cost, and fit
+4. **Design MLOps architectures** using managed services
+5. **Implement production patterns** like async inference and model monitoring
+
+## Reference Materials
+
+- [MLOps Platforms GitHub](https://github.com/thoughtworks/mlops-platforms)
+- [Machine Learning Tools Landscape](https://huyenchip.com/2020/12/30/mlops-v2.html)
+- [AWS SageMaker Documentation](https://docs.aws.amazon.com/sagemaker/latest/dg/whatis.html)
+- [GCP Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
+- [Tech Radar for ML Tools](https://github.com/zalando/tech-radar)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Buy vs Build Framework" icon="scale-balanced" href="./buy-vs-build">
+    Learn the decision framework for evaluating ML platforms
+  </Card>
+  <Card title="AWS SageMaker" icon="aws" href="./aws-sagemaker">
+    Deploy multi-model endpoints on SageMaker
+  </Card>
+  <Card title="Practice Exercise" icon="code" href="./practice">
+    Compare platforms and implement multi-model deployment
+  </Card>
+</CardGroup>

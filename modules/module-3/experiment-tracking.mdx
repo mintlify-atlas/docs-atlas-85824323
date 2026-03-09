@@ -1,0 +1,412 @@
+---
+title: "Experiment Tracking"
+description: "Track, compare, and manage ML experiments with modern MLOps tools"
+---
+
+# Experiment Tracking
+
+Experiment tracking is essential for understanding what works, reproducing results, and collaborating effectively. This guide covers configuration management, experiment logging, and model registry.
+
+## Why Track Experiments?
+
+<CardGroup cols={2}>
+  <Card title="Reproducibility" icon="rotate">
+    Record exact configurations, data versions, and code commits
+  </Card>
+  <Card title="Comparison" icon="code-compare">
+    Compare metrics across different hyperparameters and architectures
+  </Card>
+  <Card title="Collaboration" icon="users">
+    Share results and insights with team members
+  </Card>
+  <Card title="Debugging" icon="bug">
+    Diagnose training issues with detailed logs and visualizations
+  </Card>
+</CardGroup>
+
+## Configuration Management
+
+### JSON Configuration Files
+
+The reference implementations use JSON for configuration:
+
+```json conf/example.json
+{
+  "model_name_or_path": "google/mobilebert-uncased",
+  "train_file": "./data/train.csv",
+  "validation_file": "./data/val.csv",
+  "output_dir": "results",
+  
+  "max_seq_length": 128,
+  "per_device_train_batch_size": 32,
+  "per_device_eval_batch_size": 32,
+  "learning_rate": 5e-05,
+  "num_train_epochs": 5,
+  
+  "eval_strategy": "steps",
+  "eval_steps": 250,
+  "logging_steps": 250,
+  "save_steps": 250,
+  
+  "load_best_model_at_end": true,
+  "metric_for_best_model": "eval_f1",
+  "report_to": ["wandb"]
+}
+```
+
+### Loading Configuration
+
+Use HuggingFace's `HfArgumentParser` for type-safe config loading:
+
+```python
+from transformers import HfArgumentParser, TrainingArguments
+from classic_example.config import ModelArguments, DataTrainingArguments
+
+def get_config(config_path: Path):
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
+    model_args, data_args, training_args = parser.parse_json_file(config_path)
+    return model_args, data_args, training_args
+
+# Load from JSON
+model_args, data_args, training_args = get_config("conf/example.json")
+```
+
+### Hydra Configuration (Alternative)
+
+For more complex projects, use [Hydra](https://hydra.cc/) for hierarchical configuration:
+
+```yaml config.yaml
+model:
+  name: bert-base-uncased
+  num_labels: 2
+
+data:
+  train_file: data/train.csv
+  val_file: data/val.csv
+  max_length: 128
+
+trainer:
+  batch_size: 32
+  learning_rate: 5e-5
+  num_epochs: 5
+```
+
+<Info>
+Hydra enables config composition, command-line overrides, and multi-run sweeps for hyperparameter search.
+</Info>
+
+## Weights & Biases Integration
+
+### Setup
+
+Configure W&B in your training environment:
+
+```bash
+# Install W&B
+pip install wandb
+
+# Login with API key
+export WANDB_API_KEY=your_api_key_here
+export WANDB_PROJECT=ml-in-production-practice
+
+# Disable in testing
+export WANDB_MODE=disabled  # or "offline"
+```
+
+### Automatic Logging
+
+HuggingFace Trainer integrates with W&B automatically:
+
+```python
+from transformers import Trainer, TrainingArguments
+
+# Enable W&B reporting
+training_args = TrainingArguments(
+    output_dir="results",
+    report_to=["wandb"],  # Enable W&B logging
+    logging_steps=100,
+    eval_steps=100,
+    run_name="bert-sst2-experiment",
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+    compute_metrics=compute_metrics,
+)
+
+# Logs automatically sent to W&B
+train_result = trainer.train()
+```
+
+This automatically logs:
+- Training and evaluation metrics
+- Learning rate schedule
+- Gradient norms
+- System metrics (GPU, CPU, memory)
+- Model checkpoints
+
+### Custom Logging
+
+Add custom metrics and artifacts:
+
+```python
+import wandb
+
+# Log custom metrics
+wandb.log({
+    "custom_metric": 0.95,
+    "epoch": epoch,
+    "learning_rate": lr,
+})
+
+# Log images
+wandb.log({"confusion_matrix": wandb.Image(cm_plot)})
+
+# Log tables
+table = wandb.Table(columns=["text", "prediction", "label"])
+for text, pred, label in zip(texts, predictions, labels):
+    table.add_data(text, pred, label)
+wandb.log({"predictions": table})
+```
+
+## Model Registry
+
+Use W&B Artifacts to version and share models:
+
+```python
+import wandb
+from pathlib import Path
+
+def upload_to_registry(model_name: str, model_path: Path):
+    """Upload model artifacts to W&B registry."""
+    with wandb.init() as _:
+        art = wandb.Artifact(model_name, type="model")
+        art.add_file(model_path / "config.json")
+        art.add_file(model_path / "model.safetensors")
+        art.add_file(model_path / "tokenizer.json")
+        art.add_file(model_path / "tokenizer_config.json")
+        art.add_file(model_path / "special_tokens_map.json")
+        art.add_file(model_path / "README.md")
+        wandb.log_artifact(art)
+
+def load_from_registry(model_name: str, model_path: Path):
+    """Download model from W&B registry."""
+    with wandb.init() as run:
+        artifact = run.use_artifact(model_name, type="model")
+        artifact_dir = artifact.download(root=model_path)
+        return artifact_dir
+```
+
+Usage:
+
+```bash
+# Upload model
+python classic_example/cli.py upload-to-registry \
+    example_model ./results
+
+# Download model
+python classic_example/cli.py load-from-registry \
+    example_model:latest ./downloaded_model
+```
+
+## Experiment Tracking Tools
+
+<Tabs>
+  <Tab title="Weights & Biases">
+    **Best for:** Teams, visualization, collaboration
+    
+    **Features:**
+    - Rich visualizations and dashboards
+    - Experiment comparison
+    - Model registry and versioning
+    - Hyperparameter sweeps
+    - Reports and documentation
+    
+    **Resources:**
+    - [W&B Documentation](https://docs.wandb.ai/)
+    - [Model Registry Guide](https://docs.wandb.ai/guides/model_registry)
+  </Tab>
+  
+  <Tab title="Neptune.ai">
+    **Best for:** Enterprise teams, metadata tracking
+    
+    **Features:**
+    - Metadata organization
+    - Query and filter experiments
+    - Model registry
+    - Notebook integration
+    - Team collaboration
+    
+    **Resources:**
+    - [Neptune Documentation](https://docs.neptune.ai/)
+    - [Compare Tracking Tools](https://neptune.ai/blog/best-ml-experiment-tracking-tools)
+  </Tab>
+  
+  <Tab title="Aim">
+    **Best for:** Self-hosted, open-source
+    
+    **Features:**
+    - Lightweight and fast
+    - Open-source and free
+    - Easy self-hosting
+    - Python API
+    - Search and comparison
+    
+    **Resources:**
+    - [Aim on GitHub](https://github.com/aimhubio/aim)
+  </Tab>
+  
+  <Tab title="MLflow">
+    **Best for:** End-to-end ML lifecycle
+    
+    **Features:**
+    - Tracking experiments
+    - Model registry
+    - Model deployment
+    - Project packaging
+    - Runs comparison
+    
+    **Resources:**
+    - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
+  </Tab>
+</Tabs>
+
+## Hyperparameter Search
+
+### W&B Sweeps
+
+Define a sweep configuration:
+
+```yaml sweep.yaml
+program: classic_example/cli.py
+method: bayes
+metric:
+  name: eval_f1
+  goal: maximize
+parameters:
+  learning_rate:
+    min: 0.00001
+    max: 0.0001
+  per_device_train_batch_size:
+    values: [16, 32, 64]
+  num_train_epochs:
+    values: [3, 5, 7]
+```
+
+Run the sweep:
+
+```bash
+# Initialize sweep
+wandb sweep sweep.yaml
+
+# Run agents
+wandb agent your-entity/your-project/sweep-id
+```
+
+### NNI (Neural Network Intelligence)
+
+Microsoft's AutoML toolkit:
+
+```python
+import nni
+
+def main():
+    # Get hyperparameters from NNI
+    params = nni.get_next_parameter()
+    
+    # Train model
+    model = train_model(**params)
+    
+    # Report metrics
+    nni.report_final_result(accuracy)
+```
+
+<Info>
+See [NNI documentation](https://github.com/microsoft/nni) for distributed hyperparameter optimization.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Track Everything">
+    Log all relevant information:
+    - Hyperparameters and config
+    - Training/validation metrics
+    - Model checkpoints
+    - Code version (git commit)
+    - Data version
+    - System info (GPU, CUDA version)
+  </Accordion>
+  
+  <Accordion title="Organize Experiments">
+    Use consistent naming and tagging:
+    - Project names: `ml-in-production-practice`
+    - Run names: `bert-sst2-lr5e5-batch32`
+    - Tags: `baseline`, `production`, `experiment`
+    - Groups: by model architecture or dataset
+  </Accordion>
+  
+  <Accordion title="Compare Apples to Apples">
+    When comparing experiments:
+    - Use the same data splits
+    - Fix random seeds for reproducibility
+    - Use consistent evaluation metrics
+    - Document any changes in setup
+  </Accordion>
+  
+  <Accordion title="Clean Up Failed Runs">
+    Remove or tag failed experiments:
+    - Delete early test runs
+    - Tag debugging experiments
+    - Keep only successful runs in comparisons
+  </Accordion>
+</AccordionGroup>
+
+## Example Workflow
+
+```bash
+# 1. Set up environment
+export WANDB_PROJECT=ml-in-production-practice
+export WANDB_API_KEY=your_key
+
+# 2. Prepare data
+python classic_example/cli.py load-sst2-data ./data
+
+# 3. Run training with experiment tracking
+python classic_example/cli.py train ./conf/example.json
+
+# 4. Upload model to registry
+python classic_example/cli.py upload-to-registry \
+    bert-sst2-v1 ./results
+
+# 5. View results
+open https://wandb.ai/your-username/ml-in-production-practice
+```
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="W&B Documentation" icon="book" href="https://docs.wandb.ai/">
+    Complete guide to Weights & Biases
+  </Card>
+  <Card title="15 Best Experiment Tracking Tools" icon="list" href="https://neptune.ai/blog/best-ml-experiment-tracking-tools">
+    Comprehensive comparison of tracking platforms
+  </Card>
+  <Card title="Data Science Lifecycle" icon="rotate" href="https://github.com/dslp/dslp">
+    Process for managing the ML lifecycle
+  </Card>
+  <Card title="Hydra Configuration" icon="droplet" href="https://hydra.cc/docs/intro/">
+    Framework for complex configuration management
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Model Cards" icon="id-card" href="./model-cards">
+  Learn how to document models with standardized model cards
+</Card>

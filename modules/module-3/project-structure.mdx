@@ -1,0 +1,300 @@
+---
+title: "Project Structure"
+description: "Organize ML training projects with proper Python packaging and structure"
+---
+
+# Project Structure
+
+Proper project organization is essential for maintainable, reproducible ML training workflows. This guide covers Python packaging, ML-specific project templates, and best practices.
+
+## Python Package Structure
+
+The reference implementations follow standard Python packaging conventions:
+
+```
+classic-example/
+├── classic_example/          # Main package
+│   ├── __init__.py
+│   ├── cli.py               # Command-line interface
+│   ├── config.py            # Configuration dataclasses
+│   ├── data.py              # Data loading utilities
+│   ├── train.py             # Training logic
+│   ├── predictor.py         # Inference code
+│   └── utils.py             # Helper functions
+├── tests/                   # Test suite
+│   ├── test_code.py
+│   ├── test_data.py
+│   └── test_model.py
+├── conf/                    # Configuration files
+│   ├── example.json
+│   └── fast.json
+├── Dockerfile               # Container definition
+├── Makefile                 # Build automation
+├── requirements.txt         # Dependencies
+└── README.md
+```
+
+## Classic Example Package
+
+The `classic_example` package demonstrates BERT-based training:
+
+### Module Organization
+
+<Tabs>
+  <Tab title="cli.py">
+    Command-line interface using Typer:
+    ```python
+    import typer
+    from classic_example.train import train
+    from classic_example.data import load_sst2_data
+    from classic_example.utils import upload_to_registry, load_from_registry
+    
+    app = typer.Typer()
+    app.command()(train)
+    app.command()(load_sst2_data)
+    app.command()(upload_to_registry)
+    app.command()(load_from_registry)
+    
+    if __name__ == "__main__":
+        app()
+    ```
+  </Tab>
+  
+  <Tab title="config.py">
+    Configuration dataclasses:
+    ```python
+    from dataclasses import dataclass
+    from typing import Optional
+    
+    @dataclass
+    class DataTrainingArguments:
+        train_file: str
+        validation_file: str
+        max_seq_length: int = 128
+        overwrite_cache: bool = False
+        pad_to_max_length: bool = True
+        max_train_samples: Optional[int] = None
+        max_eval_samples: Optional[int] = None
+    
+    @dataclass
+    class ModelArguments:
+        model_name_or_path: str
+        config_name: Optional[str] = None
+        tokenizer_name: Optional[str] = None
+        cache_dir: Optional[str] = None
+        use_fast_tokenizer: bool = True
+        use_wandb: bool = False
+        save_model: bool = False
+    ```
+  </Tab>
+  
+  <Tab title="data.py">
+    Data loading utilities:
+    ```python
+    from pathlib import Path
+    from datasets import load_dataset
+    from sklearn.model_selection import train_test_split
+    
+    def load_sst2_data(path_to_save: Path):
+        """Load SST-2 sentiment analysis dataset."""
+        path_to_save.mkdir(parents=True, exist_ok=True)
+        
+        dataset = load_dataset("glue", "sst2")
+        df_train, df_val = train_test_split(
+            dataset["train"].to_pandas(), 
+            random_state=42
+        )
+        
+        df_train.to_csv(path_to_save / "train.csv", index=False)
+        df_val.to_csv(path_to_save / "val.csv", index=False)
+    ```
+  </Tab>
+  
+  <Tab title="utils.py">
+    Helper functions:
+    ```python
+    import wandb
+    from pathlib import Path
+    from sklearn.metrics import f1_score, fbeta_score
+    
+    def compute_metrics(p: EvalPrediction) -> Dict[str, float]:
+        """Compute F1 and F0.5 scores."""
+        preds = np.argmax(p.predictions, axis=1)
+        return {
+            "f1": f1_score(y_true=p.label_ids, y_pred=preds),
+            "f0.5": fbeta_score(y_true=p.label_ids, y_pred=preds, beta=0.5),
+        }
+    
+    def upload_to_registry(model_name: str, model_path: Path):
+        """Upload model artifacts to W&B registry."""
+        with wandb.init() as _:
+            art = wandb.Artifact(model_name, type="model")
+            art.add_file(model_path / "config.json")
+            art.add_file(model_path / "model.safetensors")
+            art.add_file(model_path / "tokenizer.json")
+            wandb.log_artifact(art)
+    ```
+  </Tab>
+</Tabs>
+
+## Generative Example Structure
+
+The `generative_example` package follows a similar structure for LLM training:
+
+```
+generative-example/
+├── generative_example/
+│   ├── __init__.py
+│   ├── cli.py               # CLI with Typer
+│   ├── config.py            # LoRA and training configs
+│   ├── data.py              # Dataset preparation
+│   ├── train.py             # SFT training with LoRA
+│   ├── predictor.py         # Inference wrapper
+│   └── utils.py
+├── tests/
+├── conf/
+│   └── example.json         # Phi-3 training config
+└── requirements.txt
+```
+
+### LLM-Specific Configuration
+
+```python
+@dataclass
+class ModelArguments:
+    model_id: str                    # HuggingFace model ID
+    lora_r: int                      # LoRA rank
+    lora_alpha: int                  # LoRA alpha
+    lora_dropout: float              # LoRA dropout rate
+
+@dataclass
+class DataTrainingArguments:
+    train_file: str                  # JSONL training data
+    test_file: str                   # JSONL test data
+```
+
+## ML Project Templates
+
+<CardGroup cols={2}>
+  <Card title="Lightning-Hydra Template" icon="github" href="https://github.com/ashleve/lightning-hydra-template">
+    Production-ready template with PyTorch Lightning and Hydra configuration
+  </Card>
+  <Card title="Sample Python Module" icon="python" href="https://github.com/navdeep-G/samplemod">
+    Minimal example of Python project structure
+  </Card>
+</CardGroup>
+
+## Build Automation
+
+Use Makefiles to standardize common tasks:
+
+```makefile
+build:
+	docker build -f Dockerfile -t classic-example:latest .
+
+run_dev: build
+	docker run -it -v ${PWD}:/main classic-example:latest /bin/bash
+
+format:
+	ruff format classic_example/ tests/
+
+lint:
+	ruff check classic_example/ tests/
+
+test:
+	pytest --disable-warnings ./tests/
+
+train_example:
+	python classic_example/cli.py load-sst2-data ./data
+	python classic_example/cli.py train ./conf/example.json
+	python classic_example/cli.py upload-to-registry example_model ./results
+```
+
+## Code Style
+
+Use [Ruff](https://github.com/astral-sh/ruff) for fast linting and formatting:
+
+```bash
+# Format code
+ruff format classic_example/ tests/
+
+# Check for issues
+ruff check classic_example/ tests/
+```
+
+<Info>
+Ruff is 10-100x faster than Black and Flake8 while providing equivalent functionality.
+</Info>
+
+## Docker Integration
+
+Containerize training workflows for reproducibility:
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /main
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+ENV PYTHONPATH=/main
+
+CMD ["python", "classic_example/cli.py", "train", "./conf/example.json"]
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Separate Configuration from Code">
+    Use JSON or YAML files for hyperparameters and paths. This enables:
+    - Easy experimentation without code changes
+    - Version control for configurations
+    - Reproducible runs from config files
+  </Accordion>
+  
+  <Accordion title="Modular Components">
+    Split training logic into reusable modules:
+    - `data.py`: Dataset loading and preprocessing
+    - `train.py`: Training loop and checkpointing
+    - `predictor.py`: Inference and evaluation
+    - `utils.py`: Shared helper functions
+  </Accordion>
+  
+  <Accordion title="Command-Line Interface">
+    Use Typer or Click to create user-friendly CLIs:
+    - Type-safe argument parsing
+    - Automatic help documentation
+    - Easy integration with scripts and CI/CD
+  </Accordion>
+  
+  <Accordion title="Testing Infrastructure">
+    Include tests for all components:
+    - `test_code.py`: Unit tests for functions
+    - `test_data.py`: Data validation tests
+    - `test_model.py`: Model behavior tests
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Python Project Structure" icon="book" href="https://docs.python-guide.org/writing/structure/">
+    Comprehensive guide to structuring Python projects
+  </Card>
+  <Card title="Deep Learning Projects" icon="brain" href="https://neptune.ai/blog/how-to-organize-deep-learning-projects-best-practices">
+    Best practices for organizing ML projects
+  </Card>
+  <Card title="README Driven Development" icon="readme" href="https://tom.preston-werner.com/2010/08/23/readme-driven-development.html">
+    Write documentation before implementation
+  </Card>
+  <Card title="The Twelve Factors" icon="list-ol" href="https://12factor.net/">
+    Principles for building production applications
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Configuration Management" icon="sliders" href="./experiment-tracking">
+  Learn how to manage training configurations and track experiments
+</Card>

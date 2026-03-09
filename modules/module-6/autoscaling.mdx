@@ -1,0 +1,535 @@
+---
+title: "Autoscaling"
+description: "Configure HPA and KNative autoscaling for ML workloads"
+---
+
+## Overview
+
+Autoscaling automatically adjusts the number of running instances based on demand. This is crucial for ML services with variable traffic patterns.
+
+## Types of Autoscaling
+
+### Vertical Scaling
+
+Adjust CPU/memory/GPU resources of individual pods.
+
+**Pros:**
+- Simple to implement
+- No application changes needed
+- Good for predictable workloads
+
+**Cons:**
+- Limited by node capacity
+- Requires pod restart
+- No redundancy benefits
+
+**Tools:**
+- [Vertical Pod Autoscaler (VPA)](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)
+- [Railway Autoscaling](https://docs.railway.app/reference/scaling)
+
+### Horizontal Scaling
+
+Increase or decrease the number of pod replicas.
+
+**Pros:**
+- Better fault tolerance
+- No pod restart needed
+- Scales beyond single node
+- Better cost efficiency
+
+**Cons:**
+- Requires stateless applications
+- More complex setup
+- Slower scale-up time
+
+**Tools:**
+- Kubernetes HPA
+- KNative Autoscaling
+- KEDA
+
+This guide focuses on **horizontal scaling** as it's the most common approach for ML services.
+
+## Horizontal Pod Autoscaler (HPA)
+
+### Prerequisites
+
+#### Install Metrics Server
+
+HPA requires metrics-server to collect resource metrics:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+For local clusters (kind, minikube), patch to allow insecure TLS:
+
+```bash
+kubectl patch -n kube-system deployment metrics-server --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+```
+
+Verify metrics are available:
+
+```bash
+kubectl top nodes
+kubectl top pods
+```
+
+#### Configure Resource Requests
+
+HPA requires resource requests to be set on your deployment:
+
+```yaml app-fastapi-resources.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-fastapi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-fastapi
+  template:
+    metadata:
+      labels:
+        app: app-fastapi
+    spec:
+      containers:
+        - name: app-fastapi
+          image: ghcr.io/kyryl-opens-ml/app-fastapi:latest
+          env:
+          - name: WANDB_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: wandb
+                key: WANDB_API_KEY
+          resources:
+            limits:
+              cpu: 500m
+            requests:
+              cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-fastapi
+  labels:
+    app: app-fastapi
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+  selector:
+    app: app-fastapi
+```
+
+Apply the deployment:
+
+```bash
+kubectl apply -f app-fastapi-resources.yaml
+```
+
+<Note>
+**Resource Requests**: Set `requests` to typical usage and `limits` to maximum allowed. HPA uses the `requests` value as the baseline.
+</Note>
+
+### Create HPA
+
+#### Via CLI
+
+Quick way to create an HPA:
+
+```bash
+kubectl autoscale deployment app-fastapi \
+  --cpu-percent=50 \
+  --min=1 \
+  --max=10
+```
+
+#### Via YAML
+
+More control with declarative configuration:
+
+```yaml app-fastapi-hpa.yaml
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-fastapi
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-fastapi
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 50
+```
+
+Apply:
+
+```bash
+kubectl create -f app-fastapi-hpa.yaml
+```
+
+### Monitor HPA
+
+```bash
+# View HPA status
+kubectl get hpa
+
+# Watch HPA in real-time
+kubectl get hpa -w
+
+# Detailed view
+kubectl describe hpa app-fastapi
+```
+
+Example output:
+
+```
+NAME          REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS
+app-fastapi   Deployment/app-fastapi   23%/50%   1         10        2
+```
+
+### Test Autoscaling
+
+Generate load to trigger scaling:
+
+```bash
+# Port forward to service
+kubectl port-forward svc/app-fastapi 8080:8080
+
+# In another terminal, run load test
+locust -f locustfile.py \
+  --host=http://localhost:8080 \
+  --users 100 \
+  --spawn-rate 10 \
+  --headless \
+  --run-time 5m
+```
+
+Watch pods scale:
+
+```bash
+watch kubectl get pods -l app=app-fastapi
+```
+
+### Advanced HPA (v2)
+
+The v2 API supports multiple metrics and custom metrics:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-fastapi-advanced
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app-fastapi
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+```
+
+**Key Features:**
+- Multiple metrics (CPU + Memory)
+- Custom scaling behavior
+- Stabilization windows to prevent flapping
+- Control scale up/down rates
+
+## KNative Autoscaling
+
+KNative provides advanced autoscaling features for KServe inference services:
+
+- **Scale to zero**: Reduce costs during idle periods
+- **Concurrency-based**: Scale based on concurrent requests
+- **Faster response**: Sub-second scaling decisions
+- **RPS-based**: Scale based on requests per second
+
+### Prerequisites
+
+KNative is installed with KServe. Verify:
+
+```bash
+kubectl get pods -n knative-serving
+```
+
+### KServe with Autoscaling
+
+```yaml kserve-inferenceserver-autoscaling.yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: custom-model-autoscaling
+spec:
+  predictor:
+    scaleTarget: 1
+    scaleMetric: concurrency  
+    containers:
+      - name: kserve-container
+        image: ghcr.io/kyryl-opens-ml/app-kserve:latest
+        imagePullPolicy: Always
+        env:
+        - name: WANDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb
+              key: WANDB_API_KEY
+```
+
+Deploy:
+
+```bash
+kubectl create -f kserve-inferenceserver-autoscaling.yaml
+```
+
+### Autoscaling Parameters
+
+Add annotations to fine-tune autoscaling:
+
+```yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: custom-model-autoscaling
+  annotations:
+    autoscaling.knative.dev/target: "10"
+    autoscaling.knative.dev/metric: "concurrency"
+    autoscaling.knative.dev/min-scale: "1"
+    autoscaling.knative.dev/max-scale: "10"
+    autoscaling.knative.dev/scale-down-delay: "30s"
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: ghcr.io/kyryl-opens-ml/app-kserve:latest
+```
+
+**Common Annotations:**
+
+| Annotation | Description | Default |
+|------------|-------------|----------|
+| `autoscaling.knative.dev/target` | Target metric value | 100 |
+| `autoscaling.knative.dev/metric` | Metric type (`concurrency`, `rps`, `cpu`, `memory`) | `concurrency` |
+| `autoscaling.knative.dev/min-scale` | Minimum replicas (0 = scale to zero) | 0 |
+| `autoscaling.knative.dev/max-scale` | Maximum replicas | 0 (unlimited) |
+| `autoscaling.knative.dev/scale-down-delay` | Delay before scaling down | 0s |
+| `autoscaling.knative.dev/scale-to-zero-pod-retention-period` | Time before terminating idle pod | 0s |
+| `autoscaling.knative.dev/window` | Aggregation window | 60s |
+
+### Test KNative Autoscaling
+
+Generate concurrent requests:
+
+```bash
+seq 1 1000 | xargs -n1 -P10 -I {} curl -v \
+  -H "Host: custom-model-autoscaling.default.example.com" \
+  -H "Content-Type: application/json" \
+  "http://localhost:8080/v1/models/custom-model:predict" \
+  -d @input.json
+```
+
+Monitor scaling:
+
+```bash
+watch kubectl get pods -l serving.kserve.io/inferenceservice=custom-model-autoscaling
+```
+
+### Scale to Zero
+
+For services with intermittent traffic, enable scale to zero:
+
+```yaml
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: custom-model-scale-to-zero
+  annotations:
+    autoscaling.knative.dev/min-scale: "0"
+    autoscaling.knative.dev/scale-to-zero-pod-retention-period: "5m"
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: ghcr.io/kyryl-opens-ml/app-kserve:latest
+```
+
+<Warning>
+**Cold Start Penalty**: Scale to zero introduces latency on first request. Balance cost savings vs. user experience.
+</Warning>
+
+## Scaling Strategies
+
+### When to Use HPA
+
+- Kubernetes-native deployments (not KServe)
+- CPU/Memory-based scaling sufficient
+- Steady traffic patterns
+- Simple setup requirements
+
+### When to Use KNative
+
+- Using KServe for inference
+- Need scale-to-zero capability
+- Bursty traffic patterns
+- Want concurrency-based scaling
+- Need faster scaling decisions
+
+### Comparison
+
+| Feature | HPA | KNative |
+|---------|-----|----------|
+| **Scale Metric** | CPU, Memory, Custom | Concurrency, RPS, CPU, Memory |
+| **Scale to Zero** | No | Yes |
+| **Scaling Speed** | 30s - 60s | Sub-second |
+| **Setup Complexity** | Simple | Moderate |
+| **Kubernetes Native** | Yes | Requires KNative |
+| **Best For** | General workloads | Serverless ML inference |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Set Conservative Limits" icon="shield">
+    Start with conservative min/max replicas and adjust based on observed patterns
+  </Card>
+  <Card title="Monitor Costs" icon="dollar-sign">
+    Track infrastructure costs as scaling increases resource usage
+  </Card>
+  <Card title="Use Stabilization Windows" icon="clock">
+    Prevent thrashing by configuring appropriate stabilization periods
+  </Card>
+  <Card title="Load Test" icon="gauge">
+    Test autoscaling behavior under load before production
+  </Card>
+</CardGroup>
+
+### Recommended Settings
+
+For ML inference services:
+
+```yaml
+# Conservative settings
+minReplicas: 2  # High availability
+maxReplicas: 10
+targetCPUUtilization: 70%  # Leave headroom
+
+# Aggressive cost optimization
+minReplicas: 0  # Scale to zero
+maxReplicas: 20
+autoscaling.knative.dev/target: "10"  # 10 concurrent requests
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="HPA shows <unknown> for metrics">
+    **Cause**: Metrics server not running or resource requests not set
+    
+    **Solution**:
+    ```bash
+    # Check metrics server
+    kubectl get pods -n kube-system | grep metrics-server
+    
+    # Verify metrics available
+    kubectl top pods
+    
+    # Ensure resources are set in deployment
+    kubectl describe deployment app-fastapi
+    ```
+  </Accordion>
+
+  <Accordion title="Pods not scaling up">
+    **Cause**: Target threshold not reached or max replicas hit
+    
+    **Solution**:
+    ```bash
+    # Check current metrics
+    kubectl get hpa
+    
+    # View events
+    kubectl describe hpa app-fastapi
+    
+    # Verify load is reaching pods
+    kubectl logs -l app=app-fastapi
+    ```
+  </Accordion>
+
+  <Accordion title="Pods scaling up and down rapidly">
+    **Cause**: Metrics fluctuating around threshold (flapping)
+    
+    **Solution**: Add stabilization windows in HPA v2:
+    ```yaml
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+      scaleUp:
+        stabilizationWindowSeconds: 60
+    ```
+  </Accordion>
+
+  <Accordion title="KNative not scaling to zero">
+    **Cause**: Min scale not set to 0 or retention period too long
+    
+    **Solution**:
+    ```yaml
+    annotations:
+      autoscaling.knative.dev/min-scale: "0"
+      autoscaling.knative.dev/scale-to-zero-pod-retention-period: "30s"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Kubernetes HPA" icon="link" href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/">
+    Official HPA documentation
+  </Card>
+  <Card title="HPA Walkthrough" icon="link" href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/">
+    Step-by-step HPA tutorial
+  </Card>
+  <Card title="KServe Autoscaling" icon="link" href="https://kserve.github.io/website/master/modelserving/autoscaling/autoscaling/">
+    KNative autoscaling for KServe
+  </Card>
+  <Card title="KEDA" icon="link" href="https://keda.sh/">
+    Kubernetes Event-driven Autoscaling
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Async Inference" icon="clock" href="/modules/module-6/async-inference">
+  Learn how to decouple inference from API calls using message queues
+</Card>

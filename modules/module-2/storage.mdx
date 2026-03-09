@@ -1,0 +1,317 @@
+---
+title: 'Data Storage'
+description: 'Deploy MinIO, implement S3 clients, and manage datasets with DVC'
+icon: 'box'
+---
+
+## Introduction
+
+Proper data storage is critical for ML systems. This guide covers deploying MinIO (an S3-compatible object storage), implementing Python clients, and versioning datasets with DVC.
+
+## MinIO Setup
+
+MinIO provides S3-compatible object storage that can run locally, in Docker, or on Kubernetes.
+
+### Docker Deployment
+
+The simplest way to get started:
+
+```bash
+docker run -it -p 9000:9000 -p 9001:9001 \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
+- **Port 9000**: API endpoint
+- **Port 9001**: Web console UI
+- **Default credentials**: `minioadmin` / `minioadmin`
+
+### Kubernetes Deployment
+
+<Steps>
+  <Step title="Create Kind Cluster">
+    ```bash
+    kind create cluster --name ml-in-production
+    ```
+  </Step>
+  
+  <Step title="Deploy MinIO">
+    ```bash
+    kubectl create -f minio_storage/minio-standalone-dev.yaml
+    ```
+  </Step>
+  
+  <Step title="Access Services">
+    Port-forward both API and console:
+    ```bash
+    kubectl port-forward --address=0.0.0.0 pod/minio 9000:9000
+    kubectl port-forward --address=0.0.0.0 pod/minio 9001:9001
+    ```
+  </Step>
+  
+  <Step title="Monitor with k9s">
+    ```bash
+    k9s -A
+    ```
+  </Step>
+</Steps>
+
+<Note>
+If you encounter UI access issues, see [this MinIO console issue](https://github.com/minio/console/issues/2539).
+</Note>
+
+## S3 Access via AWS CLI
+
+MinIO is fully S3-compatible, so you can use the AWS CLI:
+
+### Configuration
+
+```bash
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export AWS_ENDPOINT_URL=http://127.0.0.1:9000
+```
+
+### Common Operations
+
+```bash
+# List buckets
+aws s3 ls
+
+# Create bucket
+aws s3api create-bucket --bucket test
+
+# Upload files
+aws s3 cp --recursive . s3://test/
+```
+
+## Python Client Implementation
+
+Two approaches for implementing MinIO clients in Python.
+
+### Native MinIO Client
+
+Using the official MinIO SDK:
+
+```python minio_storage/minio_client.py
+import os
+from pathlib import Path
+from minio import Minio
+
+ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
+SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+ENDPOINT = "0.0.0.0:9000"
+
+class MinioClientNative:
+    def __init__(self, bucket_name: str) -> None:
+        client = Minio(
+            ENDPOINT, 
+            access_key=ACCESS_KEY, 
+            secret_key=SECRET_KEY, 
+            secure=False
+        )
+        self.client = client
+        self.bucket_name = bucket_name
+
+    def upload_file(self, file_path: Path):
+        self.client.fput_object(
+            self.bucket_name, 
+            file_path.name, 
+            file_path
+        )
+
+    def download_file(self, object_name: str, file_path: Path):
+        self.client.fget_object(
+            bucket_name=self.bucket_name,
+            object_name=object_name,
+            file_path=str(file_path),
+        )
+```
+
+### S3FS Client
+
+Using the s3fs library for S3-compatible access:
+
+```python minio_storage/minio_client.py
+import s3fs
+from pathlib import Path
+
+class MinioClientS3:
+    def __init__(self, bucket_name: str) -> None:
+        fs = s3fs.S3FileSystem(
+            key=ACCESS_KEY,
+            secret=SECRET_KEY,
+            use_ssl=False,
+            client_kwargs={"endpoint_url": f"http://{ENDPOINT}"},
+        )
+        self.client = fs
+        self.bucket_name = bucket_name
+
+    def upload_file(self, file_path: Path):
+        s3_file_path = f"s3://{self.bucket_name}/{file_path.name}"
+        self.client.put(str(file_path), s3_file_path)
+
+    def download_file(self, object_name: Path, file_path: Path):
+        s3_file_path = f"s3://{self.bucket_name}/{object_name}"
+        self.client.download(s3_file_path, str(file_path))
+```
+
+## Testing
+
+Comprehensive test suite using pytest:
+
+```python minio_storage/test_minio_client.py
+import uuid
+from pathlib import Path
+import pytest
+from minio_client import MinioClientNative, MinioClientS3
+
+@pytest.fixture()
+def bucket_name() -> str:
+    return "test"
+
+@pytest.fixture()
+def file_to_save(tmp_path: Path) -> Path:
+    _file_to_save = tmp_path / f"{uuid.uuid4()}.mock"
+    open(_file_to_save, "a").close()
+    return _file_to_save
+
+class TestMinioClientNative:
+    def test_upload_file(
+        self, 
+        minio_client_native: MinioClientNative, 
+        file_to_save: Path, 
+        tmp_path: Path
+    ):
+        # Upload file
+        minio_client_native.upload_file(file_to_save)
+        
+        # Download and verify
+        path_to_save = tmp_path / "saved_file.mock"
+        minio_client_native.download_file(
+            object_name=file_to_save.name, 
+            file_path=path_to_save
+        )
+        assert path_to_save.exists()
+```
+
+### Run Tests
+
+```bash
+pytest -ss ./minio_storage/test_minio_client.py
+```
+
+## Dataset Versioning with DVC
+
+DVC (Data Version Control) tracks large files and datasets using Git-like semantics.
+
+### Initialize DVC
+
+```bash
+dvc init --subdir
+git status
+git commit -m "Initialize DVC"
+```
+
+### Add Data Files
+
+<Steps>
+  <Step title="Create data">
+    ```bash
+    mkdir data
+    touch ./data/big-data.csv
+    ```
+  </Step>
+  
+  <Step title="Track with DVC">
+    ```bash
+    dvc add ./data/big-data.csv
+    git add data/.gitignore data/big-data.csv.dvc
+    git commit -m "Add raw data"
+    ```
+  </Step>
+</Steps>
+
+### Configure MinIO as Remote Storage
+
+<Steps>
+  <Step title="Set credentials">
+    ```bash
+    export AWS_ACCESS_KEY_ID=minioadmin
+    export AWS_SECRET_ACCESS_KEY=minioadmin
+    export AWS_ENDPOINT_URL=http://127.0.0.1:9000
+    ```
+  </Step>
+  
+  <Step title="Create bucket">
+    ```bash
+    aws s3api create-bucket --bucket ml-data
+    ```
+  </Step>
+  
+  <Step title="Add remote">
+    ```bash
+    dvc remote add -d minio s3://ml-data
+    dvc remote modify minio endpointurl $AWS_ENDPOINT_URL
+    ```
+  </Step>
+  
+  <Step title="Commit configuration">
+    ```bash
+    git add .dvc/config
+    git commit -m "Configure remote storage"
+    git push
+    ```
+  </Step>
+  
+  <Step title="Push data">
+    ```bash
+    dvc push
+    ```
+  </Step>
+</Steps>
+
+### Pull Data
+
+Team members can fetch the data:
+
+```bash
+git pull
+dvc pull
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Security">
+    - Use strong credentials in production
+    - Enable SSL/TLS for remote access
+    - Implement IAM policies for bucket access
+    - Rotate access keys regularly
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Use multipart uploads for large files
+    - Enable compression for text data
+    - Implement connection pooling
+    - Cache frequently accessed objects
+  </Accordion>
+  
+  <Accordion title="Data Organization">
+    - Use consistent naming conventions
+    - Organize by project/experiment/version
+    - Tag objects with metadata
+    - Implement lifecycle policies
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+- [DVC Documentation](https://dvc.org/doc/start/data-management)
+- [Dataset Registry Examples](https://github.com/iterative/dataset-registry)
+- [MinIO Python SDK](https://min.io/docs/minio/linux/developers/python/API.html)
+- [Kubernetes MinIO Examples](https://github.com/kubernetes/examples/tree/master/staging/storage/minio)
+
+## Next Steps
+
+- Learn about [Data Formats](/modules/module-2/formats) and performance benchmarking
+- Explore [Streaming Datasets](/modules/module-2/streaming) for efficient training

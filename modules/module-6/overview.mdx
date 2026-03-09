@@ -1,0 +1,132 @@
+---
+title: "Module 6: Optimization"
+description: "Learn benchmarking, autoscaling, and model optimization techniques for production ML systems"
+---
+
+<img
+  src="/images/serving.jpg"
+  alt="Scaling and optimization"
+/>
+
+## Overview
+
+This module covers essential optimization techniques for production ML systems:
+
+- **Load Testing**: Benchmark your models with Locust, k6, and Vegeta
+- **Autoscaling**: Implement horizontal pod autoscaling with HPA and KNative
+- **Async Inference**: Decouple inference from API calls using message queues
+- **Model Optimization**: Reduce latency and costs with quantization
+
+<Note>
+**Premature optimization is the root of all evil!** Always measure before optimizing.
+</Note>
+
+## Learning Objectives
+
+By the end of this module, you will be able to:
+
+1. Conduct comprehensive load testing on ML APIs
+2. Configure horizontal pod autoscaling for ML workloads
+3. Implement async inference patterns with queues
+4. Apply quantization techniques to optimize model performance
+5. Make data-driven decisions about infrastructure scaling
+
+## Prerequisites
+
+- Completed Module 5 (Model Serving)
+- Running Kubernetes cluster (kind or cloud provider)
+- Deployed ML model API
+- Basic understanding of HTTP load testing
+
+## Module Structure
+
+<CardGroup cols={2}>
+  <Card title="Load Testing" icon="gauge" href="/modules/module-6/load-testing">
+    Benchmark your APIs with Locust, k6, and Vegeta
+  </Card>
+  <Card title="Autoscaling" icon="arrow-up-right-dots" href="/modules/module-6/autoscaling">
+    Configure HPA and KNative autoscaling
+  </Card>
+  <Card title="Async Inference" icon="clock" href="/modules/module-6/async-inference">
+    Implement queue-based inference patterns
+  </Card>
+  <Card title="Quantization" icon="compress" href="/modules/module-6/quantization">
+    Optimize models with quantization techniques
+  </Card>
+</CardGroup>
+
+## Setup
+
+### Create Kubernetes Cluster
+
+```bash
+kind create cluster --name ml-in-production
+```
+
+### Monitor with k9s
+
+```bash
+k9s -A
+```
+
+### Configure Secrets
+
+```bash
+export WANDB_API_KEY='your-key-here'
+kubectl create secret generic wandb --from-literal=WANDB_API_KEY=$WANDB_API_KEY
+```
+
+### Deploy Services
+
+Deploy the APIs from Module 5:
+
+```bash
+kubectl create -f ./k8s/app-fastapi.yaml
+kubectl create -f ./k8s/app-triton.yaml
+kubectl create -f ./k8s/app-streamlit.yaml
+kubectl create -f ./k8s/kserve-inferenceserver.yaml
+```
+
+## Key Concepts
+
+### Performance Metrics
+
+When optimizing ML systems, track these key metrics:
+
+- **Latency**: Response time (p50, p95, p99)
+- **Throughput**: Requests per second (RPS)
+- **Resource Utilization**: CPU, memory, GPU usage
+- **Cost**: Infrastructure spend per 1000 requests
+- **Accuracy**: Model performance after optimization
+
+### Optimization Trade-offs
+
+Every optimization involves trade-offs:
+
+| Technique | Latency | Throughput | Cost | Accuracy |
+|-----------|---------|------------|------|----------|
+| Quantization | ✅ Better | ✅ Better | ✅ Lower | ⚠️ Slight drop |
+| Autoscaling | ➡️ Same | ✅ Better | ⚠️ Variable | ➡️ Same |
+| Async Inference | ⚠️ Worse | ✅ Better | ✅ Lower | ➡️ Same |
+| Batching | ⚠️ Worse | ✅ Better | ✅ Lower | ➡️ Same |
+
+## Practice Assignments
+
+See the [practice exercises](/modules/module-6/practice) for hands-on tasks.
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Horizontal Pod Autoscaling" icon="link" href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/">
+    Official Kubernetes HPA documentation
+  </Card>
+  <Card title="KServe Autoscaling" icon="link" href="https://kserve.github.io/website/master/modelserving/autoscaling/autoscaling/">
+    KNative autoscaling for model serving
+  </Card>
+  <Card title="TGI Quantization" icon="link" href="https://huggingface.co/docs/text-generation-inference/en/conceptual/quantization">
+    HuggingFace Text Generation Inference quantization guide
+  </Card>
+  <Card title="vLLM Hardware Support" icon="link" href="https://docs.vllm.ai/en/latest/quantization/supported_hardware.html">
+    Supported quantization techniques by hardware
+  </Card>
+</CardGroup>

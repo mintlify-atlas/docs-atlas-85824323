@@ -1,0 +1,506 @@
+---
+title: 'Practice Tasks'
+description: 'Hands-on exercises for Module 2: Data Management'
+icon: 'dumbbell'
+---
+
+## Overview
+
+This module includes two practice sections with multiple deliverables. Complete all tasks to demonstrate mastery of data management for ML production systems.
+
+## H3: Data Storage & Processing
+
+### Learning Goals
+
+- Deploy MinIO with multiple configuration options
+- Implement and test Python storage clients
+- Benchmark data format performance
+- Optimize inference with parallel processing
+- Create streaming datasets
+- Build vector databases for RAG
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Essential Reading">
+    - [Data Engineer Roadmap](https://github.com/datastacktv/data-engineer-roadmap)
+    - [MinIO on Kubernetes](https://github.com/kubernetes/examples/tree/master/staging/storage/minio)
+    - [Data Formats with Pandas](https://aaltoscicomp.github.io/python-for-scicomp/data-formats/)
+    - [Python Concurrency API Guide](https://superfastpython.com/python-concurrency-choose-api/)
+  </Accordion>
+  
+  <Accordion title="Advanced Reading">
+    - [What Goes Around Comes Around (PDF)](https://db.cs.cmu.edu/papers/2024/whatgoesaround-sigmodrec2024.pdf)
+    - [Small Big Data with NumPy/Pandas](https://www.youtube.com/watch?v=8pFnrr0NnwY)
+    - [Speed Up Scientific Computing](https://pythonspeed.com/datascience/#memory)
+    - [Columnar Storage Formats (PDF)](https://arxiv.org/pdf/2304.05028.pdf)
+  </Accordion>
+  
+  <Accordion title="Deep Dives">
+    - [High Performance I/O (PDF)](https://arxiv.org/pdf/2001.01858.pdf)
+    - [PyTorch S3 IO DataPipes](https://pytorch.org/blog/announcing-cpp/)
+    - [Efficient PyTorch I/O](https://pytorch.org/blog/efficient-pytorch-io-library-for-large-datasets-many-files-many-gpus/)
+    - [AIStore by NVIDIA](https://github.com/NVIDIA/aistore)
+  </Accordion>
+  
+  <Accordion title="Textbooks & Courses">
+    - [Designing Data-Intensive Applications](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/ch04.html)
+    - [Data Engineering Cookbook](https://github.com/andkret/Cookbook)
+    - [CMU Database Systems](https://15445.courses.cs.cmu.edu/fall2023/)
+    - [CMU Advanced Database Systems](https://15721.courses.cs.cmu.edu/spring2024/)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="PR1: MinIO Deployment">
+    Write comprehensive README instructions for deploying MinIO:
+    
+    **Requirements**:
+    - Local installation steps
+    - Docker deployment with docker run
+    - Kubernetes deployment with manifests
+    - Port forwarding instructions
+    - Access credentials and UI setup
+    
+    **Deliverable**: `minio_storage/README.md`
+    
+    **Reference**: See [Storage documentation](/modules/module-2/storage#minio-setup)
+  </Step>
+  
+  <Step title="PR2: MinIO Python Client">
+    Develop CRUD client with comprehensive tests:
+    
+    **Requirements**:
+    - Implement both native MinIO and S3FS clients
+    - Create, read, update, delete operations
+    - Environment-based configuration
+    - Pytest fixtures for testing
+    - Test upload/download functionality
+    
+    **Files**:
+    - `minio_storage/minio_client.py`
+    - `minio_storage/test_minio_client.py`
+    
+    **Run tests**:
+    ```bash
+    pytest -ss ./minio_storage/test_minio_client.py
+    ```
+    
+    **Reference**: See [Python Client implementation](/modules/module-2/storage#python-client-implementation)
+  </Step>
+  
+  <Step title="PR3: Data Format Benchmarks">
+    Benchmark Pandas storage formats:
+    
+    **Requirements**:
+    - Test CSV, Parquet, Feather, HDF5
+    - Measure save time, load time, file size
+    - Create visualization of results
+    - Document findings in README
+    - Recommend format for different use cases
+    
+    **Metrics to measure**:
+    - Write time (seconds)
+    - Read time (seconds)
+    - File size (MB)
+    - Compression ratio
+    
+    **Deliverable**: `processing/format_benchmark.py`
+    
+    **Reference**: See [Format Comparison](/modules/module-2/formats#pandas-format-benchmarking)
+  </Step>
+  
+  <Step title="PR4: Inference Benchmarks">
+    Benchmark parallel inference performance:
+    
+    **Requirements**:
+    - Single worker baseline
+    - ThreadPoolExecutor implementation
+    - ProcessPoolExecutor implementation
+    - Ray distributed processing
+    - Performance comparison table
+    
+    **Expected results table**:
+    | Method | Time (s) | Speedup |
+    |--------|----------|----------|
+    | Single | X.XX | 1.0x |
+    | Thread | X.XX | Y.Yx |
+    | Process | X.XX | Y.Yx |
+    | Ray | X.XX | Y.Yx |
+    
+    **Run benchmarks**:
+    ```bash
+    python processing/inference_example.py run-single-worker --inference-size 10000000
+    python processing/inference_example.py run-pool --inference-size 10000000
+    python processing/inference_example.py run-ray --inference-size 10000000
+    ```
+    
+    **Reference**: See [Inference Performance](/modules/module-2/formats#inference-performance)
+  </Step>
+  
+  <Step title="PR5: Streaming Dataset (Optional)">
+    Convert your dataset to streaming format:
+    
+    **Requirements**:
+    - Choose format (MDS, WebDataset, TFRecord)
+    - Implement data writer
+    - Upload to S3/MinIO
+    - Create DataLoader for reading
+    - Benchmark loading speed
+    
+    **Example**:
+    ```bash
+    python streaming-dataset/convert_data.py create \
+      --input-path ./raw_data \
+      --output-path ./streaming_data
+    
+    aws s3 cp --recursive ./streaming_data s3://datasets/my-data
+    
+    python streaming-dataset/convert_data.py test \
+      --remote s3://datasets/my-data
+    ```
+    
+    **Reference**: See [Streaming Datasets](/modules/module-2/streaming)
+  </Step>
+  
+  <Step title="PR6: Vector Database">
+    Transform dataset to vector format and implement RAG:
+    
+    **Requirements**:
+    - Convert text data to embeddings
+    - Create LanceDB/Chroma database
+    - Implement ingestion pipeline
+    - Build query interface
+    - Benchmark query latency
+    
+    **CLI commands**:
+    ```bash
+    # Create database
+    python vector-db/my_rag.py create \
+      --data-path ./data \
+      --table-name my_vectors \
+      --num-documents 1000
+    
+    # Query database
+    python vector-db/my_rag.py query \
+      --table-name my_vectors \
+      --query "your search query" \
+      --top-k 5
+    ```
+    
+    **Reference**: See [Vector Databases](/modules/module-2/vector-databases)
+  </Step>
+  
+  <Step title="Google Doc: Data Section">
+    Update your design document:
+    
+    **Required sections**:
+    1. **Data Description**
+       - Dataset source and size
+       - Features and labels
+       - Data splits (train/val/test)
+    
+    2. **Storage Strategy**
+       - Storage backend (S3/MinIO)
+       - Data format choice (with justification)
+       - Versioning approach (DVC)
+    
+    3. **Processing Pipeline**
+       - Data loading strategy
+       - Preprocessing steps
+       - Performance optimizations
+       - Streaming vs batch
+    
+    4. **Infrastructure**
+       - Storage capacity needed
+       - Compute requirements
+       - Cost estimates
+    
+    **Template**: [Design Doc Template](https://docs.google.com/document/d/1dEzWd3pPozmU3AhMXjW3xcONUeNJee53djilN1A-wR8/edit)
+  </Step>
+</Steps>
+
+### Success Criteria
+
+<Checklist>
+  - [ ] 6 PRs merged (PR5 optional)
+  - [ ] All tests passing
+  - [ ] Code follows style guidelines (ruff)
+  - [ ] READMEs include clear instructions
+  - [ ] Benchmarks include results tables
+  - [ ] Google Doc data section complete
+</Checklist>
+
+## H4: Data Labeling & Validation
+
+### Learning Goals
+
+- Write effective labeling guidelines
+- Deploy annotation tools
+- Generate synthetic training data
+- Validate data quality
+- Version control datasets
+
+### Reading List
+
+<AccordionGroup>
+  <Accordion title="Labeling Best Practices">
+    - [How to Write Labeling Guidelines](https://eugeneyan.com/writing/labeling-guidelines/)
+    - [How to Develop Annotation Guidelines](https://nilsreiter.de/blog/2017/howto-annotation)
+  </Accordion>
+  
+  <Accordion title="Tools">
+    - [Label Studio](https://github.com/HumanSignal/label-studio)
+    - [Argilla](https://github.com/argilla-io/argilla)
+    - [Awesome Open Data Annotation](https://github.com/zenml-io/awesome-open-data-annotation)
+  </Accordion>
+  
+  <Accordion title="Validation">
+    - [Cleanlab for Issue Detection](https://github.com/cleanlab/cleanlab)
+    - [Deepchecks](https://github.com/deepchecks/deepchecks)
+  </Accordion>
+  
+  <Accordion title="Synthetic Data">
+    - [Stanford Alpaca Data Generation](https://github.com/tatsu-lab/stanford_alpaca?tab=readme-ov-file#data-generation-process)
+  </Accordion>
+</AccordionGroup>
+
+### Tasks
+
+<Steps>
+  <Step title="Google Doc: Labeling Section">
+    Add comprehensive labeling documentation:
+    
+    **1. Labeling Guidelines**
+    - Task definition and objectives
+    - Label definitions with examples
+    - Edge case handling
+    - Quality check procedures
+    - Decision flowchart
+    
+    **2. Cost & Time Estimation**
+    - Label 50 sample manually
+    - Calculate time per sample
+    - Estimate total time needed
+    - Compute labeling budget
+    - Include calculation methodology
+    
+    **3. Production Workflow**
+    - Data sampling strategy
+    - Annotation tool setup
+    - Quality assurance process
+    - Active learning integration
+    - Feedback collection
+    
+    **Example calculation**:
+    ```
+    Pilot: 50 samples in 30 minutes = 36 seconds/sample
+    Dataset: 10,000 samples
+    Time: 10,000 × 36s = 100 hours
+    Cost: 100 hours × $15/hour = $1,500
+    With QC (20%): $1,800
+    ```
+    
+    **Reference**: See [Cost Estimation](/modules/module-2/labeling#cost-estimation)
+  </Step>
+  
+  <Step title="PR1: DVC Dataset Versioning">
+    Commit data with DVC:
+    
+    **Requirements**:
+    - Initialize DVC in repository
+    - Add dataset files to DVC tracking
+    - Configure MinIO/S3 as remote
+    - Push data to remote storage
+    - Document workflow in README
+    
+    **Commands**:
+    ```bash
+    # Initialize
+    dvc init --subdir
+    
+    # Track data
+    dvc add ./data/dataset.csv
+    git add data/.gitignore data/dataset.csv.dvc
+    
+    # Configure remote
+    dvc remote add -d storage s3://ml-data
+    dvc remote modify storage endpointurl $AWS_ENDPOINT_URL
+    
+    # Push
+    dvc push
+    ```
+    
+    **Reference**: See [Dataset Versioning](/modules/module-2/storage#dataset-versioning-with-dvc)
+  </Step>
+  
+  <Step title="PR2: Labeling Tool Deployment">
+    Deploy Argilla or Label Studio:
+    
+    **Requirements**:
+    - Choose tool (Argilla recommended)
+    - Create deployment configuration
+    - Docker/K8s deployment instructions
+    - Access and authentication setup
+    - Dataset creation example
+    
+    **Argilla Docker**:
+    ```bash
+    docker run -it --rm --name argilla -p 6900:6900 \
+      argilla/argilla-quickstart:v2.0.0rc1
+    ```
+    
+    **Files**:
+    - `labeling/docker-compose.yml` or `labeling/k8s-manifest.yaml`
+    - `labeling/README.md`
+    - `labeling/create_dataset.py`
+    
+    **Reference**: See [Argilla Deployment](/modules/module-2/labeling#argilla)
+  </Step>
+  
+  <Step title="PR3: Synthetic Dataset (Optional)">
+    Generate synthetic data with GPT:
+    
+    **Requirements**:
+    - Design generation prompt
+    - Implement retry logic
+    - Validate generated samples
+    - Upload to labeling tool
+    - Compare with real data
+    
+    **Example**:
+    ```python
+    def generate_sample(prompt_template: str) -> Dict:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
+    
+    # Generate 1000 samples
+    samples = [generate_sample(template) for _ in range(1000)]
+    ```
+    
+    **Reference**: See [Synthetic Data Generation](/modules/module-2/labeling#synthetic-data-generation)
+  </Step>
+  
+  <Step title="PR4: Data Validation (Optional)">
+    Test data quality with Cleanlab or Deepchecks:
+    
+    **Requirements**:
+    - Load labeled dataset
+    - Run integrity checks
+    - Identify label issues
+    - Generate validation report
+    - Document findings
+    
+    **Cleanlab example**:
+    ```python
+    from cleanlab.classification import CleanLearning
+    
+    cl = CleanLearning(clf=model)
+    cl.fit(X_train, labels)
+    
+    issues = cl.get_label_issues()
+    print(f"Found {len(issues)} potential errors")
+    
+    # Save report
+    issues.to_csv("label_issues.csv")
+    ```
+    
+    **Deepchecks example**:
+    ```python
+    from deepchecks.tabular.suites import data_integrity
+    
+    suite = data_integrity()
+    result = suite.run(dataset)
+    result.save_as_html("validation_report.html")
+    ```
+    
+    **Reference**: See [Data Validation](/modules/module-2/labeling#data-validation)
+  </Step>
+</Steps>
+
+### Success Criteria
+
+<Checklist>
+  - [ ] 4 PRs merged (PR3-4 optional)
+  - [ ] DVC successfully tracking data
+  - [ ] Labeling tool deployed and accessible
+  - [ ] Google Doc labeling section complete
+  - [ ] Cost estimation based on real pilot
+  - [ ] Guidelines include examples and edge cases
+</Checklist>
+
+## Submission
+
+### Code Requirements
+
+- **Formatting**: Use `ruff format` for Python code
+- **Linting**: Pass `ruff check` with no errors
+- **Testing**: Run `pytest` from repository root
+- **Documentation**: Include README in each directory
+
+### Pull Request Format
+
+**Title**: `[module-2] <concise description>`
+
+**Example**: `[module-2] Add MinIO client with S3FS support`
+
+**Body should include**:
+- Summary of changes
+- How to test
+- Performance results (for benchmarks)
+- Screenshots (for UI/deployment)
+
+### Google Doc Requirements
+
+Your design document should include:
+
+1. **Data Section** (H3 deliverable)
+   - Dataset description
+   - Storage architecture
+   - Processing pipeline
+   - Performance benchmarks
+
+2. **Labeling Section** (H4 deliverable)
+   - Labeling guidelines
+   - Cost/time estimates
+   - Production workflow
+   - Quality assurance plan
+
+## Resources
+
+### Reference Implementations
+
+All source code available at:
+```
+~/workspace/source/module-2/
+├── minio_storage/
+├── processing/
+├── streaming-dataset/
+├── vector-db/
+└── labeling/
+```
+
+### Getting Help
+
+- **Documentation**: Review module pages
+- **Code Examples**: Check source directory
+- **Community**: Ask in course discussion forum
+- **Office Hours**: Attend weekly sessions
+
+## Next Steps
+
+After completing Module 2:
+
+1. Ensure all PRs are merged
+2. Verify Google Doc is complete
+3. Proceed to [Module 3: Model Training](/modules/module-3/overview)
+
+<Note>
+Module 2 builds the data foundation for your ML system. Take time to understand storage, formats, and labeling deeply - these decisions impact every downstream component.
+</Note>
