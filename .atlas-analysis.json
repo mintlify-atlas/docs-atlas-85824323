@@ -1,0 +1,154 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "ML in Production Practice",
+  "projectDescription": "Practical exercises and reference implementations for the Machine Learning in Production course.",
+  "theme": "aspen",
+  "primaryColor": "#040404",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "setup"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/containerization",
+              "concepts/data-management",
+              "concepts/training-workflows",
+              "concepts/pipeline-orchestration",
+              "concepts/model-serving",
+              "concepts/optimization",
+              "concepts/monitoring",
+              "concepts/production-patterns"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Modules",
+        "groups": [
+          {
+            "group": "Module 1: Infrastructure",
+            "pages": [
+              "modules/module-1/overview",
+              "modules/module-1/docker",
+              "modules/module-1/kubernetes",
+              "modules/module-1/cicd",
+              "modules/module-1/serverless",
+              "modules/module-1/practice"
+            ]
+          },
+          {
+            "group": "Module 2: Data Management",
+            "pages": [
+              "modules/module-2/overview",
+              "modules/module-2/storage",
+              "modules/module-2/formats",
+              "modules/module-2/streaming",
+              "modules/module-2/vector-databases",
+              "modules/module-2/labeling",
+              "modules/module-2/practice"
+            ]
+          },
+          {
+            "group": "Module 3: Training Workflows",
+            "pages": [
+              "modules/module-3/overview",
+              "modules/module-3/project-structure",
+              "modules/module-3/experiment-tracking",
+              "modules/module-3/model-cards",
+              "modules/module-3/classic-training",
+              "modules/module-3/llm-training",
+              "modules/module-3/practice"
+            ]
+          },
+          {
+            "group": "Module 4: Pipeline Orchestration",
+            "pages": [
+              "modules/module-4/overview",
+              "modules/module-4/airflow",
+              "modules/module-4/kubeflow",
+              "modules/module-4/dagster",
+              "modules/module-4/practice"
+            ]
+          },
+          {
+            "group": "Module 5: Model Serving",
+            "pages": [
+              "modules/module-5/overview",
+              "modules/module-5/fastapi",
+              "modules/module-5/streamlit",
+              "modules/module-5/triton",
+              "modules/module-5/kserve",
+              "modules/module-5/vllm",
+              "modules/module-5/practice"
+            ]
+          },
+          {
+            "group": "Module 6: Optimization",
+            "pages": [
+              "modules/module-6/overview",
+              "modules/module-6/load-testing",
+              "modules/module-6/autoscaling",
+              "modules/module-6/async-inference",
+              "modules/module-6/quantization",
+              "modules/module-6/practice"
+            ]
+          },
+          {
+            "group": "Module 7: Monitoring",
+            "pages": [
+              "modules/module-7/overview",
+              "modules/module-7/observability",
+              "modules/module-7/signoz",
+              "modules/module-7/grafana",
+              "modules/module-7/data-monitoring",
+              "modules/module-7/practice"
+            ]
+          },
+          {
+            "group": "Module 8: Cloud Platforms",
+            "pages": [
+              "modules/module-8/overview",
+              "modules/module-8/buy-vs-build",
+              "modules/module-8/aws-sagemaker",
+              "modules/module-8/practice"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "End-to-end ML production workflow",
+    "Docker and Kubernetes deployment",
+    "Data storage and streaming pipelines",
+    "Experiment tracking and model training",
+    "Pipeline orchestration (Airflow, Kubeflow, Dagster)",
+    "Model serving with FastAPI and vLLM",
+    "Load testing and autoscaling",
+    "LLM quantization and optimization",
+    "Monitoring and observability",
+    "Cloud platform integration"
+  ],
+  "publicApiSurface": [
+    "Module 1: Docker containerization, Kubernetes deployment, CI/CD workflows",
+    "Module 2: MinIO storage, DVC, streaming datasets, vector databases, Argilla labeling",
+    "Module 3: Hydra configuration, experiment tracking, BERT training, LLM fine-tuning",
+    "Module 4: Airflow DAGs, Kubeflow pipelines, Dagster assets",
+    "Module 5: FastAPI endpoints, Streamlit apps, Triton inference, KServe deployments, vLLM serving",
+    "Module 6: Locust load testing, HPA autoscaling, SQS queues, model quantization",
+    "Module 7: SigNoz tracing, Grafana dashboards, Evidently monitoring, Seldon analytics",
+    "Module 8: SageMaker multi-model endpoints, buy vs build patterns"
+  ]
+}
